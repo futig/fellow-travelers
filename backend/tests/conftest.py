@@ -1,8 +1,10 @@
 import os
 from collections.abc import AsyncIterator
 
+from tests.helpers.telegram import BOT_TOKEN
+
 os.environ["DATABASE_URL"] = "postgresql+asyncpg://test:test@localhost:5432/test"
-os.environ["BOT_TOKEN"] = "123456:test-token"
+os.environ["BOT_TOKEN"] = BOT_TOKEN
 os.environ["BOT_USERNAME"] = "test_bot"
 
 import pytest
