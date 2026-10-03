@@ -112,9 +112,11 @@ Authorization: tma <initData>
 | `join_<CODE>` | Экран приглашения → `GET /invites/{code}` |
 | `event_<uuid>` | Моя поездка в группе → `GET /events/{id}/my-trip` |
 | `admin_<uuid>` | Управление группой → `GET /events/{id}/admin/participants` |
+| `admin` | Раздел управления: группы, где я админ → `GET /me/events` (фильтр `is_admin`) |
 | отсутствует | Список моих групп → `GET /me/events` |
 
-Те же значения используют кнопки бота и (MVP) уведомления.
+Те же значения используют кнопки бота и (MVP) уведомления. Ссылки вида `https://t.me/<bot>?startapp=<param>`
+открывают **Main Mini App** бота — его нужно настроить в BotFather.
 
 ## 7. Обновление данных
 

@@ -386,6 +386,7 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Application' }
+        '403': { $ref: '#/components/responses/Forbidden' }    # не участник группы (админ без участия)
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/Conflict' }    # ALREADY_DEPARTED
         '401': { $ref: '#/components/responses/Unauthorized' }
@@ -405,6 +406,7 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Application' }
+        '403': { $ref: '#/components/responses/Forbidden' }    # не участник группы (админ без участия)
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/Conflict' }    # ALREADY_DEPARTED
         '401': { $ref: '#/components/responses/Unauthorized' }
@@ -424,6 +426,7 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Application' }
+        '403': { $ref: '#/components/responses/Forbidden' }    # не участник группы (админ без участия)
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/Conflict' }    # ALREADY_DEPARTED
         '401': { $ref: '#/components/responses/Unauthorized' }
@@ -453,6 +456,7 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Application' }
+        '403': { $ref: '#/components/responses/Forbidden' }    # не участник группы (админ без участия)
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/Conflict' }
         '401': { $ref: '#/components/responses/Unauthorized' }
