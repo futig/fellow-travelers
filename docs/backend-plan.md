@@ -15,7 +15,7 @@
 | Фон (MVP) | APScheduler в отдельном процессе-воркере | Опрос рейсов, уведомления; Celery пока избыточен |
 | Тесты | pytest, pytest-asyncio, httpx, testcontainers-postgres | |
 | Качество | ruff (lint + format), mypy | |
-| Зависимости | uv, `pyproject.toml` | |
+| Зависимости | `pyproject.toml`, venv + pip (uv — по желанию) | |
 | Запуск | Docker Compose: `api`, `bot`, `db` (+ `worker` в MVP) | |
 
 ## Структура `backend/`
