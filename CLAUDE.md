@@ -30,6 +30,20 @@
 
 Исключение — пользователь явно попросил сделать что-то самому, без агентов.
 
+## Окружение разработки (Windows)
+
+- Postgres проекта — Docker: `cd backend && docker compose up -d db`, хост-порт **5434**
+  (5432 занят локальным Postgres 17, 5433 — чужим контейнером). Docker Desktop может быть выключен — запустить.
+- venv: `backend/.venv` (Python 3.12). `uv` не установлен — используем `pip install -e ".[dev]"`.
+- Переменная `CURL_CA_BUNDLE` на машине указывает на несуществующий файл → pip падает на HTTPS.
+  В своём shell: `unset CURL_CA_BUNDLE`.
+- Проверки (все четыре перед каждым коммитом, с `set -o pipefail`, если есть пайпы):
+  `ruff check .`, `ruff format --check .`, `mypy`, `pytest -q -W error`.
+- Если в рабочем дереве есть незаконченные файлы параллельного исполнителя — коммитить только свои файлы
+  и проверять закоммиченное состояние в отдельном `git worktree` (с `PYTHONPATH` на worktree).
+- Агент `implementer` подхватывается при старте сессии; если его нет в списке — `general-purpose`
+  с `model: sonnet` и инструкцией сначала прочитать `.claude/agents/implementer.md`.
+
 ## Бэкенд: соглашения
 
 - Стек (предложен, см. план): Python 3.12, FastAPI, SQLAlchemy 2 (async) + Alembic, PostgreSQL, aiogram 3, pytest.
