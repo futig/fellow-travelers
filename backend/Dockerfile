@@ -13,6 +13,7 @@ RUN pip install .
 
 COPY alembic.ini ./
 COPY migrations ./migrations
+COPY data ./data
 
 USER app
 EXPOSE 8000

@@ -1,0 +1,59 @@
+code,name,city,country,timezone
+SVO,Шереметьево,Москва,RU,Europe/Moscow
+DME,Домодедово,Москва,RU,Europe/Moscow
+VKO,Внуково,Москва,RU,Europe/Moscow
+ZIA,Жуковский,Жуковский,RU,Europe/Moscow
+LED,Пулково,Санкт-Петербург,RU,Europe/Moscow
+AER,Сочи,Сочи,RU,Europe/Moscow
+KRR,Пашковский,Краснодар,RU,Europe/Moscow
+KZN,Казань,Казань,RU,Europe/Moscow
+SVX,Кольцово,Екатеринбург,RU,Asia/Yekaterinburg
+OVB,Толмачёво,Новосибирск,RU,Asia/Novosibirsk
+KUF,Курумоч,Самара,RU,Europe/Samara
+UFA,Уфа,Уфа,RU,Asia/Yekaterinburg
+ROV,Платов,Ростов-на-Дону,RU,Europe/Moscow
+VOG,Гумрак,Волгоград,RU,Europe/Volgograd
+KGD,Храброво,Калининград,RU,Europe/Kaliningrad
+MRV,Минеральные Воды,Минеральные Воды,RU,Europe/Moscow
+MCX,Уйташ,Махачкала,RU,Europe/Moscow
+GOJ,Стригино,Нижний Новгород,RU,Europe/Moscow
+PEE,Большое Савино,Пермь,RU,Asia/Yekaterinburg
+CEK,Баландино,Челябинск,RU,Asia/Yekaterinburg
+TJM,Рощино,Тюмень,RU,Asia/Yekaterinburg
+KJA,Емельяново,Красноярск,RU,Asia/Krasnoyarsk
+IKT,Иркутск,Иркутск,RU,Asia/Irkutsk
+VVO,Кневичи,Владивосток,RU,Asia/Vladivostok
+KHV,Новый,Хабаровск,RU,Asia/Vladivostok
+YKS,Якутск,Якутск,RU,Asia/Yakutsk
+OMS,Омск-Центральный,Омск,RU,Asia/Omsk
+TOF,Богашёво,Томск,RU,Asia/Tomsk
+BAX,Барнаул,Барнаул,RU,Asia/Barnaul
+MMK,Мурманск,Мурманск,RU,Europe/Moscow
+ARH,Талаги,Архангельск,RU,Europe/Moscow
+AAQ,Витязево,Анапа,RU,Europe/Moscow
+ASF,Нариманово,Астрахань,RU,Europe/Astrakhan
+STW,Ставрополь,Ставрополь,RU,Europe/Moscow
+UUD,Байкал,Улан-Удэ,RU,Asia/Irkutsk
+PKC,Елизово,Петропавловск-Камчатский,RU,Asia/Kamchatka
+SGC,Сургут,Сургут,RU,Asia/Yekaterinburg
+NUX,Новый Уренгой,Новый Уренгой,RU,Asia/Yekaterinburg
+MSQ,Минск-2,Минск,BY,Europe/Minsk
+EVN,Звартноц,Ереван,AM,Asia/Yerevan
+TBS,Тбилиси,Тбилиси,GE,Asia/Tbilisi
+GYD,Гейдар Алиев,Баку,AZ,Asia/Baku
+ALA,Алматы,Алматы,KZ,Asia/Almaty
+NQZ,Нурсултан Назарбаев,Астана,KZ,Asia/Almaty
+TAS,Ислам Каримов,Ташкент,UZ,Asia/Tashkent
+SKD,Самарканд,Самарканд,UZ,Asia/Samarkand
+FRU,Манас,Бишкек,KG,Asia/Bishkek
+DYU,Душанбе,Душанбе,TJ,Asia/Dushanbe
+IST,Стамбул,Стамбул,TR,Europe/Istanbul
+SAW,Сабиха Гёкчен,Стамбул,TR,Europe/Istanbul
+AYT,Анталья,Анталья,TR,Europe/Istanbul
+DXB,Дубай,Дубай,AE,Asia/Dubai
+AUH,Абу-Даби,Абу-Даби,AE,Asia/Dubai
+PEK,Шоуду,Пекин,CN,Asia/Shanghai
+PKX,Дасин,Пекин,CN,Asia/Shanghai
+PVG,Пудун,Шанхай,CN,Asia/Shanghai
+BKK,Суварнабхуми,Бангкок,TH,Asia/Bangkok
+HKT,Пхукет,Пхукет,TH,Asia/Bangkok

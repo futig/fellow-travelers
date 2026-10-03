@@ -3,7 +3,10 @@ from collections.abc import AsyncIterator
 
 from tests.helpers.telegram import BOT_TOKEN
 
-os.environ["DATABASE_URL"] = "postgresql+asyncpg://test:test@localhost:5432/test"
+# get_settings() приложения и Alembic смотрят на тестовую БД
+os.environ["DATABASE_URL"] = os.environ.get(
+    "TEST_DATABASE_URL", "postgresql+asyncpg://fellow:fellow@localhost:5434/fellow_travelers_test"
+)
 os.environ["BOT_TOKEN"] = BOT_TOKEN
 os.environ["BOT_USERNAME"] = "test_bot"
 
@@ -13,6 +16,8 @@ from httpx import ASGITransport, AsyncClient
 
 from app.config import get_settings
 from app.main import create_app
+
+pytest_plugins = ["tests.db"]
 
 
 @pytest.fixture

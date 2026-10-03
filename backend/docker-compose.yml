@@ -5,6 +5,8 @@ services:
       POSTGRES_USER: fellow
       POSTGRES_PASSWORD: fellow
       POSTGRES_DB: fellow_travelers
+    ports:
+      - "5434:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
