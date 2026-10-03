@@ -76,6 +76,7 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/Event' }
         '422': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
 
   /events/{event_id}:
     parameters:
@@ -92,6 +93,8 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/Event' }
         '404': { $ref: '#/components/responses/NotFound' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '422': { $ref: '#/components/responses/ValidationError' }
     patch:
       operationId: updateEvent
       tags: [events]
@@ -115,6 +118,7 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
         '422': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
 
   /events/{event_id}/invite:
     parameters:
@@ -131,6 +135,9 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/Invite' }
         '403': { $ref: '#/components/responses/Forbidden' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationError' }
 
   # ---------------------------------------------------------------- приглашения
   /invites/{code}:
@@ -148,6 +155,8 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/InvitePreview' }
         '404': { $ref: '#/components/responses/InviteNotFound' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '422': { $ref: '#/components/responses/ValidationError' }
 
   /invites/{code}/join:
     parameters:
@@ -171,6 +180,8 @@ paths:
               schema: { $ref: '#/components/schemas/Event' }
         '404': { $ref: '#/components/responses/InviteNotFound' }
         '409': { $ref: '#/components/responses/Conflict' }   # JOIN_CLOSED
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '422': { $ref: '#/components/responses/ValidationError' }
 
   # ---------------------------------------------------------------- рейсы и справочники
   /locations:
@@ -197,6 +208,7 @@ paths:
                 type: array
                 items: { $ref: '#/components/schemas/Location' }
         '422': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
 
   /events/{event_id}/trips:
     parameters:
@@ -215,6 +227,8 @@ paths:
                 type: array
                 items: { $ref: '#/components/schemas/Trip' }
         '404': { $ref: '#/components/responses/NotFound' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '422': { $ref: '#/components/responses/ValidationError' }
     post:
       operationId: createTrip
       tags: [trips]
@@ -233,6 +247,8 @@ paths:
               schema: { $ref: '#/components/schemas/Trip' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '422': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
 
   /trips/{trip_id}:
     parameters:
@@ -257,6 +273,7 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
         '422': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
     delete:
       operationId: deleteTrip
       tags: [trips]
@@ -266,6 +283,9 @@ paths:
         '204': { description: Удалено }
         '403': { $ref: '#/components/responses/Forbidden' }
         '409': { $ref: '#/components/responses/Conflict' }   # TRIP_IN_USE
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationError' }
 
   /flights/search:
     get:
@@ -297,6 +317,8 @@ paths:
                 items: { $ref: '#/components/schemas/Trip' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '503': { $ref: '#/components/responses/ServiceUnavailable' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
 
   # ---------------------------------------------------------------- заявка участника
   /events/{event_id}/my-application:
@@ -314,6 +336,8 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/Application' }
         '404': { $ref: '#/components/responses/NotFound' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '422': { $ref: '#/components/responses/ValidationError' }
     put:
       operationId: upsertMyApplication
       tags: [applications]
@@ -345,6 +369,8 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }   # FORBIDDEN | PHONE_REQUIRED
         '409': { $ref: '#/components/responses/Conflict' }    # APPLICATION_LOCKED | ALREADY_DEPARTED | CAPACITY_EXCEEDED
         '422': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
 
   /events/{event_id}/my-application/go-solo:
     parameters:
@@ -362,6 +388,8 @@ paths:
               schema: { $ref: '#/components/schemas/Application' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/Conflict' }    # ALREADY_DEPARTED
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '422': { $ref: '#/components/responses/ValidationError' }
 
   /events/{event_id}/my-application/resume-search:
     parameters:
@@ -379,6 +407,8 @@ paths:
               schema: { $ref: '#/components/schemas/Application' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/Conflict' }    # ALREADY_DEPARTED
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '422': { $ref: '#/components/responses/ValidationError' }
 
   /events/{event_id}/my-application/cancel:
     parameters:
@@ -396,6 +426,8 @@ paths:
               schema: { $ref: '#/components/schemas/Application' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/Conflict' }    # ALREADY_DEPARTED
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '422': { $ref: '#/components/responses/ValidationError' }
 
   /events/{event_id}/my-application/marks:
     parameters:
@@ -423,6 +455,8 @@ paths:
               schema: { $ref: '#/components/schemas/Application' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/Conflict' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '422': { $ref: '#/components/responses/ValidationError' }
 
   /events/{event_id}/my-trip:
     parameters:
@@ -439,6 +473,8 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/MyTrip' }
         '404': { $ref: '#/components/responses/NotFound' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '422': { $ref: '#/components/responses/ValidationError' }
 
   # ---------------------------------------------------------------- админ
   /events/{event_id}/admin/participants:
@@ -468,6 +504,9 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/AdminParticipants' }
         '403': { $ref: '#/components/responses/Forbidden' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationError' }
 
   /events/{event_id}/admin/transfers:
     parameters:
@@ -486,6 +525,9 @@ paths:
                 type: array
                 items: { $ref: '#/components/schemas/Transfer' }
         '403': { $ref: '#/components/responses/Forbidden' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationError' }
     post:
       operationId: adminCreateTransfer
       tags: [admin]
@@ -504,6 +546,9 @@ paths:
               schema: { $ref: '#/components/schemas/Transfer' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '409': { $ref: '#/components/responses/Conflict' }    # INCOMPATIBLE_TRANSFER | CAPACITY_EXCEEDED
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationError' }
 
   /events/{event_id}/admin/transfers/{transfer_id}/members:
     parameters:
@@ -530,6 +575,9 @@ paths:
               schema: { $ref: '#/components/schemas/Transfer' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '409': { $ref: '#/components/responses/Conflict' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationError' }
 
   /events/{event_id}/admin/applications/{application_id}/departed:
     parameters:
@@ -547,6 +595,9 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/Application' }
         '403': { $ref: '#/components/responses/Forbidden' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationError' }
 
   /events/{event_id}/admin/transfers/{transfer_id}/departed:
     parameters:
@@ -564,6 +615,9 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/Transfer' }
         '403': { $ref: '#/components/responses/Forbidden' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationError' }
 
   /events/{event_id}/admin/board:
     parameters:
@@ -588,6 +642,9 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/Board' }
         '403': { $ref: '#/components/responses/Forbidden' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationError' }
 
 components:
   securitySchemes:
