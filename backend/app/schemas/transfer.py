@@ -33,14 +33,7 @@ class TransferMember(BaseModel):
         return cls(
             application_id=application.id,
             is_me=viewer_id is not None and application.user_id == viewer_id,
-            contact=Contact(
-                user_id=user.id,
-                first_name=user.first_name,
-                last_name=user.last_name,
-                username=user.username,
-                phone=user.phone,
-                photo_url=user.photo_url,
-            ),
+            contact=Contact.from_user(user),
             passengers=2 if application.with_companion else 1,
             baggage_count=application.baggage_count,
             trip_number=trip.number,

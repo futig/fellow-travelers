@@ -1,7 +1,17 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Index, String, UniqueConstraint
+from sqlalchemy import (
+    CheckConstraint,
+    ColumnElement,
+    DateTime,
+    ForeignKey,
+    Index,
+    String,
+    UniqueConstraint,
+    func,
+)
+from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin, str_enum
@@ -51,7 +61,12 @@ class Trip(TimestampMixin, Base):
         foreign_keys=[arrival_location_id], lazy="raise"
     )
 
-    @property
+    @hybrid_property
     def effective_arrival(self) -> datetime:
         """Расчётное прибытие, если известно, иначе по расписанию — по нему идёт подбор."""
         return self.estimated_arrival or self.scheduled_arrival
+
+    @effective_arrival.inplace.expression
+    @classmethod
+    def _effective_arrival_expression(cls) -> ColumnElement[datetime]:
+        return func.coalesce(cls.estimated_arrival, cls.scheduled_arrival)

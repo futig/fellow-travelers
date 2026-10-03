@@ -15,7 +15,7 @@ _FOREIGN_KEY_VIOLATION = "23503"
 
 TRIP_NOT_FOUND = "Рейс не найден"
 
-_WITH_TRIP = (
+WITH_TRIP = (
     selectinload(Application.trip).selectinload(Trip.departure_location),
     selectinload(Application.trip).selectinload(Trip.arrival_location),
 )
@@ -52,7 +52,7 @@ async def find_application(
     stmt = (
         select(Application)
         .where(Application.event_id == event_id, Application.user_id == user_id)
-        .options(*_WITH_TRIP)
+        .options(*WITH_TRIP)
         .execution_options(populate_existing=True)
     )
     return (await session.execute(stmt)).scalar_one_or_none()

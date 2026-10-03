@@ -13,6 +13,17 @@ class Contact(BaseModel):
     phone: str | None
     photo_url: str | None
 
+    @classmethod
+    def from_user(cls, user: User) -> "Contact":
+        return cls(
+            user_id=user.id,
+            first_name=user.first_name,
+            last_name=user.last_name,
+            username=user.username,
+            phone=user.phone,
+            photo_url=user.photo_url,
+        )
+
 
 class Me(Contact):
     telegram_id: int
@@ -21,12 +32,7 @@ class Me(Contact):
     @classmethod
     def from_user(cls, user: User) -> "Me":
         return cls(
-            user_id=user.id,
-            first_name=user.first_name,
-            last_name=user.last_name,
-            username=user.username,
-            phone=user.phone,
-            photo_url=user.photo_url,
+            **Contact.from_user(user).model_dump(),
             telegram_id=user.telegram_id,
             has_phone=user.phone is not None,
         )
