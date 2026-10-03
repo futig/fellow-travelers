@@ -83,7 +83,6 @@ class Trip(BaseModel):
         departure = trip.departure_location
         arrival = trip.arrival_location
         estimated = trip.estimated_arrival
-        effective = estimated if estimated is not None else trip.scheduled_arrival
         return cls(
             id=trip.id,
             event_id=trip.event_id,
@@ -94,7 +93,7 @@ class Trip(BaseModel):
             scheduled_departure=to_local(trip.scheduled_departure, departure.timezone),
             scheduled_arrival=to_local(trip.scheduled_arrival, arrival.timezone),
             estimated_arrival=None if estimated is None else to_local(estimated, arrival.timezone),
-            effective_arrival=to_local(effective, arrival.timezone),
+            effective_arrival=to_local(trip.effective_arrival, arrival.timezone),
             status=trip.status,
             source=trip.source,
             updated_at=trip.updated_at.astimezone(UTC),

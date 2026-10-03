@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from app.api.v1 import applications, events, invites, locations, me, trips
+from app.api.v1 import applications, events, invites, locations, me, my_trip, trips
 
 router = APIRouter()
 router.include_router(me.router)
@@ -9,3 +9,4 @@ router.include_router(invites.router)
 router.include_router(locations.router)
 router.include_router(trips.router)
 router.include_router(applications.router)
+router.include_router(my_trip.router)

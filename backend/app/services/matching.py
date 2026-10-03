@@ -41,7 +41,7 @@ def _candidate(application: Application, trip: Trip) -> MatchCandidate:
     return MatchCandidate(
         id=application.id,
         arrival_location_id=trip.arrival_location_id,
-        arrival_at=trip.estimated_arrival or trip.scheduled_arrival,
+        arrival_at=trip.effective_arrival,
         passengers=2 if application.with_companion else 1,
         baggage=application.baggage_count,
         max_wait=timedelta(minutes=application.max_wait_minutes),

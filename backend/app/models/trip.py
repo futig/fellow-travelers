@@ -50,3 +50,8 @@ class Trip(TimestampMixin, Base):
     arrival_location: Mapped[Location] = relationship(
         foreign_keys=[arrival_location_id], lazy="raise"
     )
+
+    @property
+    def effective_arrival(self) -> datetime:
+        """Расчётное прибытие, если известно, иначе по расписанию — по нему идёт подбор."""
+        return self.estimated_arrival or self.scheduled_arrival
