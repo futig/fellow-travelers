@@ -133,3 +133,14 @@ Push/WebSocket нет. Фронт перезапрашивает данные п
 | Моя поездка | `GET /events/{id}/my-trip`, действия `POST /events/{id}/my-application/{go-solo,resume-search,cancel}`, `PUT .../marks` |
 | Управление: участники | `GET /events/{id}/admin/participants`, `GET /events/{id}/admin/transfers` |
 | (MVP) Табло, правка составов | `GET /events/{id}/admin/board`, `PUT /events/{id}/admin/transfers/{tid}/members`, `POST .../admin/applications/{aid}/departed` |
+
+## 9. Роли и доступ
+
+- Создатель группы — её админ (`is_admin=true`). Участником он **не становится автоматически**
+  (`is_participant=false`): если едет сам, вступает по своему же приглашению и заполняет заявку.
+- Пользователь, который не админ и не участник группы, получает `404 NOT_FOUND` на любые её ресурсы —
+  существование группы не раскрываем.
+- Участник, который пытается выполнить действие админа, получает `403 FORBIDDEN`.
+- `PATCH` различает «поле не передано» и `null`: `null` допустим только для `pickup_point` (сброс —
+  посадка там же, где сбор) и `chat_url` (удалить ссылку).
+- Во входных телах лишние поля запрещены → `422 VALIDATION_ERROR` («Лишнее поле»).
