@@ -26,5 +26,15 @@ services:
     ports:
       - "8000:8000"
 
+  bot:
+    build: .
+    command: python -m app.bot
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://fellow:fellow@db:5432/fellow_travelers
+    depends_on:
+      db:
+        condition: service_healthy
+
 volumes:
   pgdata:

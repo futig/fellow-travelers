@@ -16,6 +16,7 @@ dependencies = [
     "asyncpg>=0.30",
     "alembic>=1.14",
     "tzdata>=2024.1",
+    "aiogram>=3.13",
 ]
 
 [project.optional-dependencies]

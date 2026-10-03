@@ -37,6 +37,17 @@ docker compose up --build        # API на http://localhost:8000, провер�
 
 Без Docker: `.venv/Scripts/uvicorn app.main:app --reload` (нужен доступный PostgreSQL из `DATABASE_URL`).
 
+## Telegram-бот
+
+Бот (aiogram 3, long polling) показывает стартовое сообщение, получает телефон и даёт кнопки открытия
+мини-приложения. Запуск: `.venv/Scripts/python -m app.bot` (нужны `BOT_TOKEN`, `BOT_USERNAME`, `DATABASE_URL` в
+`.env` и доступная БД) или `docker compose up --build bot`.
+
+Состояние (запомненный код `join_<CODE>` до получения телефона) хранится в памяти бота и теряется при перезапуске.
+
+Настройка в @BotFather: `/newapp` (или Bot Settings → Configure Mini App) — создать **Main Mini App**, указать
+URL мини-приложения. Ссылки `https://t.me/<bot>?startapp=<param>` работают только при настроенном Main Mini App.
+
 ## Миграции
 
 ```bash
