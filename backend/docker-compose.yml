@@ -36,5 +36,14 @@ services:
       db:
         condition: service_healthy
 
+  web:
+    build:
+      context: ../frontend
+      args:
+        VITE_BOT_USERNAME: ${BOT_USERNAME:-}
+    depends_on: [api]
+    ports:
+      - "8080:80"
+
 volumes:
   pgdata:

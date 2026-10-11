@@ -1,0 +1,16 @@
+.bar {
+  display: flex;
+  gap: 6px;
+}
+
+.segment,
+.active {
+  flex: 1;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--surface-base);
+}
+
+.active {
+  background: var(--line-accent);
+}
