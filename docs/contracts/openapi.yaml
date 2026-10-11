@@ -1,0 +1,1135 @@
+openapi: 3.1.0
+info:
+  title: Fellow Travelers API
+  version: 0.1.0
+  description: |
+    API мини-приложения «Попутчики». Общие соглашения (аутентификация, ошибки, время, статусы,
+    deep link) — в docs/contracts/README.md.
+    `x-stage: pre-mvp` — нужно на первом этапе, `x-stage: mvp` — появится позже.
+servers:
+  - url: /api/v1
+security:
+  - telegramInitData: []
+
+tags:
+  - name: profile
+    description: Текущий пользователь и его группы (CAP-01, CAP-07)
+  - name: events
+    description: Группы мероприятий и их настройки (CAP-02, CAP-03)
+  - name: invites
+    description: Вступление по коду или ссылке (CAP-03)
+  - name: trips
+    description: Транспортные рейсы и справочник точек (CAP-05)
+  - name: applications
+    description: Заявка участника, отметки и экран поездки (CAP-04, CAP-06..CAP-10)
+  - name: admin
+    description: Список участников, трансферы и табло — только создатель группы (CAP-11)
+
+paths:
+  # ---------------------------------------------------------------- профиль
+  /me:
+    get:
+      operationId: getMe
+      tags: [profile]
+      summary: Текущий пользователь (CAP-01)
+      x-stage: pre-mvp
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Me' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /me/events:
+    get:
+      operationId: listMyEvents
+      tags: [profile]
+      summary: Группы, где я админ или участник (CAP-07)
+      x-stage: pre-mvp
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/EventSummary' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  # ---------------------------------------------------------------- группы
+  /events:
+    post:
+      operationId: createEvent
+      tags: [events]
+      summary: Создать группу мероприятия; создатель становится админом (CAP-02)
+      x-stage: pre-mvp
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EventCreate' }
+      responses:
+        '201':
+          description: Создано
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Event' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /events/{event_id}:
+    parameters:
+      - $ref: '#/components/parameters/EventId'
+    get:
+      operationId: getEvent
+      tags: [events]
+      summary: Группа (доступно админу и участникам)
+      x-stage: pre-mvp
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Event' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+    patch:
+      operationId: updateEvent
+      tags: [events]
+      summary: Изменить настройки группы (только админ)
+      description: |
+        Все поля необязательны. pre-MVP: правка любых полей без пересчёта трансферов.
+        MVP: изменение точек при назначенных трансферах — по правилам из «Требует уточнения / Изменения»,
+        `join_open=false` закрывает вступление.
+      x-stage: pre-mvp
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EventUpdate' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Event' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /events/{event_id}/invite:
+    parameters:
+      - $ref: '#/components/parameters/EventId'
+    get:
+      operationId: getEventInvite
+      tags: [events]
+      summary: Код и ссылка приглашения (только админ, CAP-03)
+      x-stage: pre-mvp
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Invite' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  # ---------------------------------------------------------------- приглашения
+  /invites/{code}:
+    parameters:
+      - $ref: '#/components/parameters/InviteCode'
+    get:
+      operationId: getInvitePreview
+      tags: [invites]
+      summary: Превью группы по коду — до вступления (CAP-03)
+      x-stage: pre-mvp
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/InvitePreview' }
+        '404': { $ref: '#/components/responses/InviteNotFound' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /invites/{code}/join:
+    parameters:
+      - $ref: '#/components/parameters/InviteCode'
+    post:
+      operationId: joinByInvite
+      tags: [invites]
+      summary: Вступить в группу. Идемпотентно — повторный вызов возвращает существующее участие
+      description: Телефон для вступления не требуется (требуется для отправки заявки).
+      x-stage: pre-mvp
+      responses:
+        '200':
+          description: Уже участник
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Event' }
+        '201':
+          description: Вступил
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Event' }
+        '404': { $ref: '#/components/responses/InviteNotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }   # JOIN_CLOSED
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  # ---------------------------------------------------------------- рейсы и справочники
+  /locations:
+    get:
+      operationId: searchLocations
+      tags: [trips]
+      summary: Поиск аэропортов (справочник для ввода рейсов)
+      x-stage: pre-mvp
+      parameters:
+        - name: q
+          in: query
+          required: true
+          description: IATA-код, город или название, от 2 символов
+          schema: { type: string, minLength: 2 }
+        - name: kind
+          in: query
+          schema: { $ref: '#/components/schemas/LocationKind' }
+      responses:
+        '200':
+          description: До 20 результатов
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Location' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /events/{event_id}/trips:
+    parameters:
+      - $ref: '#/components/parameters/EventId'
+    get:
+      operationId: listEventTrips
+      tags: [trips]
+      summary: Рейсы группы — для выбора в заявке (CAP-05)
+      x-stage: pre-mvp
+      responses:
+        '200':
+          description: Отсортированы по scheduled_arrival
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Trip' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+    post:
+      operationId: createTrip
+      tags: [trips]
+      summary: Добавить рейс вручную (только админ)
+      x-stage: pre-mvp
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TripInput' }
+      responses:
+        '201':
+          description: Создано
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Trip' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /trips/{trip_id}:
+    parameters:
+      - $ref: '#/components/parameters/TripId'
+    patch:
+      operationId: updateTrip
+      tags: [trips]
+      summary: Исправить рейс (только админ группы)
+      description: Поля как в TripInput, все необязательны. Запись становится source=manual.
+      x-stage: pre-mvp
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TripUpdate' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Trip' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    delete:
+      operationId: deleteTrip
+      tags: [trips]
+      summary: Удалить рейс (только админ; нельзя, если на него ссылаются заявки)
+      x-stage: pre-mvp
+      responses:
+        '204': { description: Удалено }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }   # TRIP_IN_USE
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /flights/search:
+    get:
+      operationId: searchFlights
+      tags: [trips]
+      summary: Поиск авиарейса у поставщика по номеру и дате
+      x-stage: mvp
+      parameters:
+        - name: event_id
+          in: query
+          required: true
+          schema: { type: string, format: uuid }
+        - name: number
+          in: query
+          required: true
+          schema: { type: string, example: SU1234 }
+        - name: date
+          in: query
+          required: true
+          description: Дата вылета в таймзоне аэропорта вылета (уточняется — см. docs, «Поставщик и обновление»)
+          schema: { type: string, format: date }
+      responses:
+        '200':
+          description: Найденные рейсы (уже сохранены в группе, можно сразу выбрать в заявке)
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Trip' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  # ---------------------------------------------------------------- заявка участника
+  /events/{event_id}/my-application:
+    parameters:
+      - $ref: '#/components/parameters/EventId'
+    get:
+      operationId: getMyApplication
+      tags: [applications]
+      summary: Моя заявка в группе
+      x-stage: pre-mvp
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Application' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+    put:
+      operationId: upsertMyApplication
+      tags: [applications]
+      summary: Создать или изменить заявку (CAP-04). Одна заявка на пользователя в группе
+      description: |
+        Первый вызов создаёт заявку в статусе `searching` и запускает подбор; повторный — обновляет её
+        (вторая заявка не создаётся). Заявка в статусе `cancelled` при PUT возвращается в `searching`.
+        pre-MVP: при статусе `assigned` → 409 APPLICATION_LOCKED.
+        MVP: изменение назначенной заявки — проверка совместимости, при несовместимости заявка выходит
+        из трансфера и снова ищет попутчиков.
+        После «Уехал» → 409 ALREADY_DEPARTED.
+      x-stage: pre-mvp
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ApplicationInput' }
+      responses:
+        '200':
+          description: Обновлена
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Application' }
+        '201':
+          description: Создана
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Application' }
+        '403': { $ref: '#/components/responses/Forbidden' }   # FORBIDDEN | PHONE_REQUIRED
+        '409': { $ref: '#/components/responses/Conflict' }    # APPLICATION_LOCKED | ALREADY_DEPARTED | CAPACITY_EXCEEDED
+        '422': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /events/{event_id}/my-application/go-solo:
+    parameters:
+      - $ref: '#/components/parameters/EventId'
+    post:
+      operationId: goSolo
+      tags: [applications]
+      summary: «Еду самостоятельно» — выйти из подбора и трансфера, точки поездки остаются видны
+      x-stage: pre-mvp
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Application' }
+        '403': { $ref: '#/components/responses/Forbidden' }    # не участник группы (админ без участия)
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }    # ALREADY_DEPARTED
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /events/{event_id}/my-application/resume-search:
+    parameters:
+      - $ref: '#/components/parameters/EventId'
+    post:
+      operationId: resumeSearch
+      tags: [applications]
+      summary: Вернуться в поиск попутчиков (из solo или cancelled); запускает подбор
+      x-stage: pre-mvp
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Application' }
+        '403': { $ref: '#/components/responses/Forbidden' }    # не участник группы (админ без участия)
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }    # ALREADY_DEPARTED
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /events/{event_id}/my-application/cancel:
+    parameters:
+      - $ref: '#/components/parameters/EventId'
+    post:
+      operationId: cancelMyApplication
+      tags: [applications]
+      summary: Отменить участие — выйти из трансфера и из числа ожидаемых людей
+      x-stage: pre-mvp
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Application' }
+        '403': { $ref: '#/components/responses/Forbidden' }    # не участник группы (админ без участия)
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }    # ALREADY_DEPARTED
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /events/{event_id}/my-application/marks:
+    parameters:
+      - $ref: '#/components/parameters/EventId'
+    put:
+      operationId: setMyMarks
+      tags: [applications]
+      summary: Отметки «Я на месте» / «Уехал» (CAP-08). Отметка автора относится и к спутнику
+      description: |
+        Передаются только меняемые поля.
+        pre-MVP: `departed=true` необратимо — `departed=false` после отъезда → 409 ALREADY_DEPARTED.
+        MVP: исправление ошибочного «Уехал» по согласованному правилу.
+        Отметка «Уехал» на заявке в трансфере не отмечает остальных попутчиков.
+      x-stage: pre-mvp
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/MarksInput' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Application' }
+        '403': { $ref: '#/components/responses/Forbidden' }    # не участник группы (админ без участия)
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /events/{event_id}/my-trip:
+    parameters:
+      - $ref: '#/components/parameters/EventId'
+    get:
+      operationId: getMyTrip
+      tags: [applications]
+      summary: Экран «Моя поездка» — всё одним запросом (CAP-07..10)
+      x-stage: pre-mvp
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MyTrip' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  # ---------------------------------------------------------------- админ
+  /events/{event_id}/admin/participants:
+    parameters:
+      - $ref: '#/components/parameters/EventId'
+    get:
+      operationId: adminListParticipants
+      tags: [admin]
+      summary: Список участников группы с заявками, контактами, трансферами и отметками (CAP-11)
+      x-stage: pre-mvp
+      parameters:
+        - name: status
+          in: query
+          description: Фильтр по статусу заявки (можно несколько)
+          schema:
+            type: array
+            items: { $ref: '#/components/schemas/ApplicationStatus' }
+          style: form
+          explode: true
+        - name: trip_id
+          in: query
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminParticipants' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /events/{event_id}/admin/transfers:
+    parameters:
+      - $ref: '#/components/parameters/EventId'
+    get:
+      operationId: adminListTransfers
+      tags: [admin]
+      summary: Составы трансферов группы
+      x-stage: pre-mvp
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Transfer' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+    post:
+      operationId: adminCreateTransfer
+      tags: [admin]
+      summary: Создать трансфер вручную из заявок
+      x-stage: mvp
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TransferMembersInput' }
+      responses:
+        '201':
+          description: Создано
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Transfer' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }    # INCOMPATIBLE_TRANSFER | CAPACITY_EXCEEDED
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /events/{event_id}/admin/transfers/{transfer_id}/members:
+    parameters:
+      - $ref: '#/components/parameters/EventId'
+      - $ref: '#/components/parameters/TransferId'
+    put:
+      operationId: adminSetTransferMembers
+      tags: [admin]
+      summary: Задать состав трансфера целиком (до отъезда)
+      description: |
+        Проверяются те же правила, что и в автоподборе. Исключённые заявки возвращаются в `searching`.
+        Пустой список расформировывает трансфер.
+      x-stage: mvp
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TransferMembersInput' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Transfer' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /events/{event_id}/admin/applications/{application_id}/departed:
+    parameters:
+      - $ref: '#/components/parameters/EventId'
+      - $ref: '#/components/parameters/ApplicationId'
+    post:
+      operationId: adminMarkApplicationDeparted
+      tags: [admin]
+      summary: Админ отмечает отъезд заявки
+      x-stage: mvp
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Application' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /events/{event_id}/admin/transfers/{transfer_id}/departed:
+    parameters:
+      - $ref: '#/components/parameters/EventId'
+      - $ref: '#/components/parameters/TransferId'
+    post:
+      operationId: adminMarkTransferDeparted
+      tags: [admin]
+      summary: Админ отмечает отъезд всего трансфера
+      x-stage: mvp
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Transfer' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /events/{event_id}/admin/board:
+    parameters:
+      - $ref: '#/components/parameters/EventId'
+    get:
+      operationId: adminGetBoard
+      tags: [admin]
+      summary: Табло рейсов группы со сводными количествами
+      x-stage: mvp
+      parameters:
+        - name: trip_status
+          in: query
+          schema:
+            type: array
+            items: { $ref: '#/components/schemas/TripStatus' }
+          style: form
+          explode: true
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Board' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+components:
+  securitySchemes:
+    telegramInitData:
+      type: apiKey
+      in: header
+      name: Authorization
+      description: '`tma <Telegram.WebApp.initData>`'
+
+  parameters:
+    EventId:
+      name: event_id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    TripId:
+      name: trip_id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    TransferId:
+      name: transfer_id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    ApplicationId:
+      name: application_id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    InviteCode:
+      name: code
+      in: path
+      required: true
+      description: Без учёта регистра
+      schema: { type: string, pattern: '^[A-Za-z0-9]{6}$' }
+
+  responses:
+    Unauthorized:
+      description: UNAUTHORIZED
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Forbidden:
+      description: FORBIDDEN | PHONE_REQUIRED
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    NotFound:
+      description: NOT_FOUND
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    InviteNotFound:
+      description: INVITE_NOT_FOUND
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Conflict:
+      description: Бизнес-конфликт, см. error.code
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    ValidationError:
+      description: VALIDATION_ERROR, details.fields — ошибки по полям
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    ServiceUnavailable:
+      description: FLIGHT_PROVIDER_UNAVAILABLE
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+
+  schemas:
+    # ------------------------------------------------------------ общее
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message, details]
+          properties:
+            code:
+              type: string
+              enum:
+                - VALIDATION_ERROR
+                - UNAUTHORIZED
+                - FORBIDDEN
+                - PHONE_REQUIRED
+                - NOT_FOUND
+                - INVITE_NOT_FOUND
+                - JOIN_CLOSED
+                - APPLICATION_LOCKED
+                - ALREADY_DEPARTED
+                - CAPACITY_EXCEEDED
+                - TRIP_IN_USE
+                - INCOMPATIBLE_TRANSFER
+                - FLIGHT_PROVIDER_UNAVAILABLE
+                - INTERNAL_ERROR
+            message: { type: string }
+            details:
+              type: [object, 'null']
+              properties:
+                fields:
+                  type: object
+                  additionalProperties: { type: string }
+
+    Point:
+      type: object
+      description: Точка, заданная админом
+      required: [address]
+      properties:
+        address: { type: string, minLength: 1, maxLength: 500 }
+        lat: { type: [number, 'null'], description: 'MVP: для ссылки на карту и Яндекс Go' }
+        lon: { type: [number, 'null'] }
+
+    # ------------------------------------------------------------ профиль
+    Contact:
+      type: object
+      description: Публичные данные человека — видны попутчикам по трансферу и админу группы
+      required: [user_id, first_name, last_name, username, phone, photo_url]
+      properties:
+        user_id: { type: string, format: uuid }
+        first_name: { type: string }
+        last_name: { type: [string, 'null'] }
+        username: { type: [string, 'null'], description: '@username без @' }
+        phone: { type: [string, 'null'], example: '+79991234567' }
+        photo_url: { type: [string, 'null'], description: 'MVP; null → заглушка' }
+
+    Me:
+      allOf:
+        - $ref: '#/components/schemas/Contact'
+        - type: object
+          required: [telegram_id, has_phone]
+          properties:
+            telegram_id: { type: integer, format: int64 }
+            has_phone: { type: boolean }
+
+    # ------------------------------------------------------------ группы
+    EventCreate:
+      type: object
+      required: [title, starts_on, ends_on, meeting_point, destination, meeting_instruction]
+      properties:
+        title: { type: string, minLength: 1, maxLength: 200 }
+        starts_on: { type: string, format: date }
+        ends_on: { type: string, format: date, description: '>= starts_on' }
+        meeting_point: { $ref: '#/components/schemas/Point' }
+        pickup_point:
+          description: Точка посадки в такси; null — совпадает с местом сбора
+          oneOf:
+            - $ref: '#/components/schemas/Point'
+            - type: 'null'
+        destination: { $ref: '#/components/schemas/Point' }
+        meeting_instruction:
+          type: string
+          maxLength: 2000
+          example: Встречаемся у стойки информации у выхода № 3
+        chat_url:
+          type: [string, 'null']
+          format: uri
+          description: 'MVP: ссылка на общий чат (необязательно)'
+
+    EventUpdate:
+      type: object
+      description: Частичное обновление — любые поля EventCreate + join_open
+      properties:
+        title: { type: string, minLength: 1, maxLength: 200 }
+        starts_on: { type: string, format: date }
+        ends_on: { type: string, format: date }
+        meeting_point: { $ref: '#/components/schemas/Point' }
+        pickup_point:
+          oneOf:
+            - $ref: '#/components/schemas/Point'
+            - type: 'null'
+        destination: { $ref: '#/components/schemas/Point' }
+        meeting_instruction: { type: string, maxLength: 2000 }
+        chat_url: { type: [string, 'null'], format: uri }
+        join_open: { type: boolean, description: 'MVP: false — закрыть вступление' }
+
+    Event:
+      type: object
+      required: [id, title, starts_on, ends_on, meeting_point, pickup_point, destination,
+                 meeting_instruction, chat_url, join_open, is_admin, is_participant]
+      properties:
+        id: { type: string, format: uuid }
+        title: { type: string }
+        starts_on: { type: string, format: date }
+        ends_on: { type: string, format: date }
+        meeting_point: { $ref: '#/components/schemas/Point' }
+        pickup_point:
+          description: Уже с подстановкой — если не задана отдельно, равна meeting_point
+          $ref: '#/components/schemas/Point'
+        destination: { $ref: '#/components/schemas/Point' }
+        meeting_instruction: { type: string }
+        chat_url: { type: [string, 'null'] }
+        join_open: { type: boolean }
+        is_admin: { type: boolean, description: Я создатель группы }
+        is_participant: { type: boolean, description: Я вступил в группу как участник }
+
+    EventSummary:
+      type: object
+      required: [id, title, starts_on, ends_on, is_admin, is_participant, my_application_status]
+      properties:
+        id: { type: string, format: uuid }
+        title: { type: string }
+        starts_on: { type: string, format: date }
+        ends_on: { type: string, format: date }
+        is_admin: { type: boolean }
+        is_participant: { type: boolean }
+        my_application_status:
+          description: null — заявки ещё нет
+          oneOf:
+            - $ref: '#/components/schemas/ApplicationStatus'
+            - type: 'null'
+
+    Invite:
+      type: object
+      required: [code, link]
+      properties:
+        code: { type: string, example: K7Q2ZP }
+        link: { type: string, format: uri, example: 'https://t.me/poputchiki_bot?startapp=join_K7Q2ZP' }
+
+    InvitePreview:
+      type: object
+      required: [event_id, title, starts_on, ends_on, join_open, already_member]
+      properties:
+        event_id: { type: string, format: uuid }
+        title: { type: string }
+        starts_on: { type: string, format: date }
+        ends_on: { type: string, format: date }
+        join_open: { type: boolean, description: false — показать причину и не давать вступить }
+        already_member: { type: boolean, description: true — сразу вести в группу }
+
+    # ------------------------------------------------------------ рейсы
+    LocationKind:
+      type: string
+      enum: [airport, station]
+      description: station — задел под поезда, на текущих этапах не используется
+
+    Location:
+      type: object
+      required: [id, kind, code, name, city, country, timezone]
+      properties:
+        id: { type: string, format: uuid }
+        kind: { $ref: '#/components/schemas/LocationKind' }
+        code: { type: string, description: IATA для аэропорта, example: SVO }
+        name: { type: string, example: Шереметьево }
+        city: { type: string, example: Москва }
+        country: { type: string, description: ISO 3166-1 alpha-2, example: RU }
+        timezone: { type: string, description: IANA, example: Europe/Moscow }
+
+    TransportMode:
+      type: string
+      enum: [flight]
+      description: Задел под train; сейчас только flight
+
+    TripStatus:
+      type: string
+      enum: [scheduled, delayed, departed, landed, cancelled, unknown]
+
+    TripInput:
+      type: object
+      required: [mode, number, departure_location_id, arrival_location_id,
+                 scheduled_departure, scheduled_arrival]
+      properties:
+        mode: { $ref: '#/components/schemas/TransportMode' }
+        number: { type: string, pattern: '^[A-Za-z0-9]{2,3}\s?\d{1,5}$', example: SU 1234 }
+        departure_location_id: { type: string, format: uuid }
+        arrival_location_id: { type: string, format: uuid }
+        scheduled_departure:
+          type: string
+          format: date-time
+          description: Без смещения — трактуется в таймзоне аэропорта вылета
+        scheduled_arrival:
+          type: string
+          format: date-time
+          description: Без смещения — трактуется в таймзоне аэропорта прилёта; > scheduled_departure
+
+    TripUpdate:
+      type: object
+      properties:
+        number: { type: string }
+        departure_location_id: { type: string, format: uuid }
+        arrival_location_id: { type: string, format: uuid }
+        scheduled_departure: { type: string, format: date-time }
+        scheduled_arrival: { type: string, format: date-time }
+        estimated_arrival:
+          type: [string, 'null']
+          format: date-time
+          description: Ручное исправление расчётного времени (в MVP может быть перезаписано поставщиком)
+
+    Trip:
+      type: object
+      description: Транспортный рейс. Время отдаётся со смещением своего аэропорта
+      required: [id, event_id, mode, number, departure_location, arrival_location,
+                 scheduled_departure, scheduled_arrival, estimated_arrival, effective_arrival,
+                 status, source, updated_at]
+      properties:
+        id: { type: string, format: uuid }
+        event_id: { type: string, format: uuid }
+        mode: { $ref: '#/components/schemas/TransportMode' }
+        number: { type: string, example: SU1234, description: 'Нормализованный: без пробелов, верхний регистр' }
+        departure_location: { $ref: '#/components/schemas/Location' }
+        arrival_location: { $ref: '#/components/schemas/Location' }
+        scheduled_departure: { type: string, format: date-time, example: '2026-11-12T07:30:00+05:00' }
+        scheduled_arrival: { type: string, format: date-time, example: '2026-11-12T10:05:00+03:00' }
+        estimated_arrival: { type: [string, 'null'], format: date-time }
+        effective_arrival:
+          type: string
+          format: date-time
+          description: estimated_arrival ?? scheduled_arrival — по нему идёт подбор
+        status: { $ref: '#/components/schemas/TripStatus' }
+        source: { type: string, enum: [manual, provider] }
+        updated_at: { type: string, format: date-time }
+
+    # ------------------------------------------------------------ заявка
+    ApplicationStatus:
+      type: string
+      enum: [searching, assigned, solo, cancelled]
+
+    WaitMinutes:
+      type: integer
+      enum: [0, 15, 30]
+
+    ApplicationInput:
+      type: object
+      required: [trip_id, with_companion, baggage_count, max_wait_minutes]
+      properties:
+        trip_id: { type: string, format: uuid, description: 'Рейс из GET /events/{event_id}/trips' }
+        with_companion: { type: boolean, description: Еду со спутником (+1) }
+        baggage_count:
+          type: integer
+          minimum: 0
+          maximum: 2
+          description: Места регистрируемого багажа суммарно на автора и спутника
+        max_wait_minutes: { $ref: '#/components/schemas/WaitMinutes' }
+
+    Application:
+      type: object
+      required: [id, event_id, trip, with_companion, passengers, baggage_count, max_wait_minutes,
+                 status, at_meeting_point, departed_at, transfer_id, created_at, updated_at]
+      properties:
+        id: { type: string, format: uuid }
+        event_id: { type: string, format: uuid }
+        trip: { $ref: '#/components/schemas/Trip' }
+        with_companion: { type: boolean }
+        passengers: { type: integer, enum: [1, 2] }
+        baggage_count: { type: integer, minimum: 0, maximum: 2 }
+        max_wait_minutes: { $ref: '#/components/schemas/WaitMinutes' }
+        status: { $ref: '#/components/schemas/ApplicationStatus' }
+        at_meeting_point: { type: boolean }
+        departed_at: { type: [string, 'null'], format: date-time }
+        transfer_id: { type: [string, 'null'], format: uuid }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    MarksInput:
+      type: object
+      minProperties: 1
+      properties:
+        at_meeting_point: { type: boolean }
+        departed: { type: boolean }
+
+    # ------------------------------------------------------------ трансфер
+    TransferMember:
+      type: object
+      required: [application_id, is_me, contact, passengers, baggage_count, trip_number,
+                 effective_arrival, at_meeting_point, departed_at]
+      properties:
+        application_id: { type: string, format: uuid }
+        is_me: { type: boolean }
+        contact: { $ref: '#/components/schemas/Contact' }
+        passengers: { type: integer, enum: [1, 2] }
+        baggage_count: { type: integer }
+        trip_number: { type: string }
+        effective_arrival: { type: string, format: date-time }
+        at_meeting_point: { type: boolean }
+        departed_at: { type: [string, 'null'], format: date-time }
+
+    Transfer:
+      type: object
+      required: [id, event_id, status, passengers_total, baggage_total, members, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        event_id: { type: string, format: uuid }
+        status:
+          type: string
+          enum: [active, departed]
+          description: departed — все участники отметили «Уехал»
+        passengers_total: { type: integer, maximum: 3 }
+        baggage_total: { type: integer, maximum: 2 }
+        members:
+          type: array
+          items: { $ref: '#/components/schemas/TransferMember' }
+        created_at: { type: string, format: date-time }
+
+    TransferMembersInput:
+      type: object
+      required: [application_ids]
+      properties:
+        application_ids:
+          type: array
+          items: { type: string, format: uuid }
+
+    MyTrip:
+      type: object
+      description: |
+        Экран поездки. application=null — заявки ещё нет (показать форму).
+        transfer=null — попутчики пока не найдены / еду сам / отменено.
+        Контакты попутчиков — только внутри своего трансфера.
+      required: [event, application, transfer, taxi]
+      properties:
+        event: { $ref: '#/components/schemas/Event' }
+        application:
+          oneOf:
+            - $ref: '#/components/schemas/Application'
+            - type: 'null'
+        transfer:
+          oneOf:
+            - $ref: '#/components/schemas/Transfer'
+            - type: 'null'
+        taxi:
+          type: object
+          description: Данные для перехода в такси (CAP-10)
+          required: [from, to, yandex_go_url]
+          properties:
+            from: { $ref: '#/components/schemas/Point' }
+            to: { $ref: '#/components/schemas/Point' }
+            yandex_go_url:
+              type: [string, 'null']
+              format: uri
+              description: 'MVP; null на pre-MVP или если у точек нет координат'
+
+    # ------------------------------------------------------------ админ
+    AdminParticipant:
+      type: object
+      required: [contact, application]
+      properties:
+        contact: { $ref: '#/components/schemas/Contact' }
+        application:
+          description: null — вступил, но заявку ещё не отправил
+          oneOf:
+            - $ref: '#/components/schemas/Application'
+            - type: 'null'
+
+    Counters:
+      type: object
+      description: Люди с учётом спутников; cancelled не входит в expected
+      required: [expected, searching, assigned, solo, at_meeting_point, departed]
+      properties:
+        expected: { type: integer }
+        searching: { type: integer }
+        assigned: { type: integer }
+        solo: { type: integer }
+        at_meeting_point: { type: integer }
+        departed: { type: integer }
+
+    AdminParticipants:
+      type: object
+      required: [counters, participants]
+      properties:
+        counters: { $ref: '#/components/schemas/Counters' }
+        participants:
+          type: array
+          items: { $ref: '#/components/schemas/AdminParticipant' }
+
+    Board:
+      type: object
+      required: [counters, trips]
+      properties:
+        counters: { $ref: '#/components/schemas/Counters' }
+        trips:
+          type: array
+          items:
+            type: object
+            required: [trip, people, application_ids]
+            properties:
+              trip: { $ref: '#/components/schemas/Trip' }
+              people: { type: integer, description: Ожидаемые люди этим рейсом }
+              application_ids:
+                type: array
+                items: { type: string, format: uuid }
