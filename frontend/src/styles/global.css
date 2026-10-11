@@ -1,0 +1,32 @@
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--surface-low);
+  color: var(--text-heavy);
+  font-family: var(--font-body);
+  font-size: 16px;
+  line-height: 22px;
+  -webkit-font-smoothing: antialiased;
+  -webkit-text-size-adjust: 100%;
+}
+
+h1,
+p {
+  margin: 0;
+}
+
+button,
+input {
+  font: inherit;
+}

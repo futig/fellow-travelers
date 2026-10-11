@@ -1,0 +1,13 @@
+@import '@fontsource/arimo/latin-400.css';
+@import '@fontsource/arimo/cyrillic-400.css';
+@import '@fontsource/arimo/latin-700.css';
+@import '@fontsource/arimo/cyrillic-700.css';
+
+/* Martian Grotesk, Evil Martians, SIL OFL 1.1 (см. src/assets/fonts/OFL.txt) */
+@font-face {
+  font-family: 'Martian Grotesk';
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+  src: url('../assets/fonts/MartianGrotesk-Bold.woff2') format('woff2');
+}

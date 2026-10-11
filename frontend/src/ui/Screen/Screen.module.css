@@ -1,0 +1,9 @@
+.screen {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 600px;
+  min-height: 100vh;
+  margin: 0 auto;
+  padding: 16px 16px 40px;
+}

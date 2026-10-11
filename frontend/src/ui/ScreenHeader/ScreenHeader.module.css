@@ -1,0 +1,33 @@
+.header {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.text {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.step {
+  font-weight: 700;
+  font-size: 12px;
+  line-height: 16px;
+  text-transform: uppercase;
+  color: var(--text-accent);
+}
+
+.title {
+  font-family: var(--font-heading);
+  font-weight: 700;
+  font-size: 28px;
+  line-height: 36px;
+  color: var(--text-heavy);
+}
+
+.subtitle {
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--text-soft);
+}
