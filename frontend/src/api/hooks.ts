@@ -50,17 +50,19 @@ export function useEvent(eventId: string) {
 }
 
 /** Код и ссылка приглашения (админ). */
-export function useInvite(eventId: string) {
+export function useInvite(eventId: string, { enabled = true }: { enabled?: boolean } = {}) {
   return useQuery({
     queryKey: queryKeys.invite(eventId),
     queryFn: () => fetchEventInvite(eventId),
+    enabled,
   });
 }
 
-export function useInvitePreview(code: string) {
+export function useInvitePreview(code: string, { enabled = true }: { enabled?: boolean } = {}) {
   return useQuery({
     queryKey: queryKeys.invitePreview(code),
     queryFn: () => fetchInvitePreview(code),
+    enabled,
   });
 }
 

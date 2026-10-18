@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router';
 import { isApiErrorCode, isUnauthorized } from '../../api/errors';
 import { useInvitePreview, useJoin } from '../../api/hooks';
 import { formatDateRange } from '../../lib/datetime';
+import { isInviteCode } from '../../lib/inviteCode';
 import { useBack, useIsFirstEntry, useReplace } from '../../lib/useBack';
 import { Button } from '../../ui/Button/Button';
 import { EmptyState } from '../../ui/EmptyState/EmptyState';
@@ -30,7 +31,16 @@ export function Invite() {
   const replace = useReplace();
   const first = useIsFirstEntry();
   useBack('/');
-  const { data: preview, error, isPending, refetch } = useInvitePreview(code);
+  // Неверный формат кода — «не нашли» сразу, без запроса.
+  const validCode = isInviteCode(code);
+  const {
+    data: preview,
+    error,
+    isPending,
+    refetch,
+  } = useInvitePreview(code, {
+    enabled: validCode,
+  });
   const join = useJoin();
   const alreadyMember = preview?.already_member === true;
 
@@ -53,7 +63,7 @@ export function Invite() {
   }
 
   // Успешное вступление и переход в группу проверяем раньше ошибок — до перехода держим загрузку.
-  if (isPending || join.isSuccess || alreadyMember) {
+  if ((validCode && isPending) || join.isSuccess || alreadyMember) {
     return (
       <Screen>
         <div aria-busy="true" className={styles.loading}>
@@ -71,7 +81,7 @@ export function Invite() {
 
   const fatal = error ?? join.error;
   if (fatal && isUnauthorized(fatal)) return <OpenInTelegramScreen />;
-  if (fatal && isNotFound(fatal)) {
+  if (!validCode || (fatal && isNotFound(fatal))) {
     return (
       <Screen center>
         <EmptyState title="Мы не нашли группу" text="Проверьте код приглашения" />
@@ -84,6 +94,7 @@ export function Invite() {
     );
   }
   if (error) return <ErrorScreen text={error.message} onRetry={() => void refetch()} />;
+  if (!preview) return null; // недостижимо: без ошибки и загрузки данные есть
 
   const header = (
     <ScreenHeader
