@@ -6,6 +6,7 @@ import { parseStartParam, startParamToPath } from './lib/startParam';
 import { getStartParamRaw } from './lib/telegram';
 import { AdminHub } from './screens/AdminHub/AdminHub';
 import { AdminInvite } from './screens/AdminInvite/AdminInvite';
+import { ApplicationWizard } from './screens/ApplicationWizard/ApplicationWizard';
 import { CreateEvent } from './screens/CreateEvent/CreateEvent';
 import { RouteError } from './screens/ErrorScreen/RouteError';
 import { GroupPlaceholder } from './screens/GroupPlaceholder/GroupPlaceholder';
@@ -34,6 +35,8 @@ export const routes: RouteObject[] = [
       { path: '/events/new', element: <CreateEvent /> },
       // Заглушка до «Моей поездки» (инкремент 5).
       { path: '/events/:id', element: <GroupPlaceholder /> },
+      // Мастер заявки: шаги — внутреннее состояние экрана, а не записи истории.
+      { path: '/events/:id/apply', element: <ApplicationWizard /> },
       { path: '/events/:id/admin', element: <AdminHub /> },
       { path: '/events/:id/admin/settings', element: <EventSettings /> },
       { path: '/events/:id/admin/invite', element: <AdminInvite /> },
