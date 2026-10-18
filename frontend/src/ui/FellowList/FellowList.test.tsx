@@ -24,7 +24,10 @@ describe('FellowList', () => {
     );
     expect(screen.getByText('+7 912 204 29 12 · @luna_sokol')).toBeInTheDocument();
     expect(screen.getByText('Летит тем же рейсом')).toBeInTheDocument();
-    expect(screen.getByText('+1')).toBeInTheDocument();
+    expect(screen.getByText('+1')).toHaveAttribute('aria-hidden', 'true');
+    expect(screen.getByText(', со спутником')).toBeInTheDocument();
+    // Аватар декоративный: без «Нет фото» для скринридера
+    expect(screen.queryByRole('img', { name: 'Нет фото' })).not.toBeInTheDocument();
   });
 
   it('без username — нет 💬, без телефона — нет 📞', () => {

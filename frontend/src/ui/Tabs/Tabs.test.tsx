@@ -25,5 +25,11 @@ describe('Tabs', () => {
     await userEvent.keyboard('{ArrowRight}');
     expect(first).toHaveAttribute('aria-selected', 'true');
     expect(first).toHaveFocus();
+    await userEvent.keyboard('{End}');
+    expect(second).toHaveAttribute('aria-selected', 'true');
+    expect(second).toHaveFocus();
+    await userEvent.keyboard('{Home}');
+    expect(first).toHaveAttribute('aria-selected', 'true');
+    expect(first).toHaveFocus();
   });
 });

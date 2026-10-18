@@ -50,16 +50,19 @@ export function FellowList({ items, 'aria-label': ariaLabel }: Props) {
           const contacts = showContacts ? contactsLine(contact) : '';
           return (
             <li key={id} className={styles.row}>
-              <Avatar src={contact.photo_url} size={32} />
+              <Avatar src={contact.photo_url} size={32} decorative />
               <div className={styles.body}>
                 <div className={styles.text}>
                   <p className={styles.name}>
                     {name}
                     {passengers === 2 && (
-                      <span className={styles.plus} aria-label="со спутником">
-                        {' '}
-                        +1
-                      </span>
+                      <>
+                        <span className={styles.plus} aria-hidden="true">
+                          {' '}
+                          +1
+                        </span>
+                        <span className={styles.srOnly}>, со спутником</span>
+                      </>
                     )}
                   </p>
                   {caption && (

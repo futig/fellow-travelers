@@ -15,7 +15,7 @@ interface Props<T extends string> {
   panelId?: (id: T) => string;
 }
 
-/** Вкладки в ряд; активная — тёмная. Стрелки влево/вправо переключают вкладку. */
+/** Вкладки в ряд; активная — тёмная. Стрелки, Home и End переключают вкладку. */
 export function Tabs<T extends string>({
   tabs,
   value,
@@ -26,10 +26,24 @@ export function Tabs<T extends string>({
   const refs = useRef<(HTMLButtonElement | null)[]>([]);
 
   function onKeyDown(e: KeyboardEvent<HTMLDivElement>) {
-    if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
     const current = tabs.findIndex((t) => t.id === value);
-    const delta = e.key === 'ArrowRight' ? 1 : -1;
-    const next = (current + delta + tabs.length) % tabs.length;
+    let next: number;
+    switch (e.key) {
+      case 'ArrowRight':
+        next = (current + 1) % tabs.length;
+        break;
+      case 'ArrowLeft':
+        next = (current - 1 + tabs.length) % tabs.length;
+        break;
+      case 'Home':
+        next = 0;
+        break;
+      case 'End':
+        next = tabs.length - 1;
+        break;
+      default:
+        return;
+    }
     const tab = tabs[next];
     if (!tab) return;
     e.preventDefault();

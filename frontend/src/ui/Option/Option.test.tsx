@@ -14,10 +14,16 @@ describe('Option', () => {
     expect(onClick).toHaveBeenCalledOnce();
   });
 
-  it('без onClick — не кнопка', () => {
-    render(<Option title="Лечу один" trailing="edit" />);
+  it('без onClick — не кнопка и без стрелки по умолчанию', () => {
+    render(<Option title="Лечу один" />);
     expect(screen.queryByRole('button')).not.toBeInTheDocument();
     expect(screen.getByText('Лечу один')).toBeInTheDocument();
+    expect(screen.queryByText('→')).not.toBeInTheDocument();
+  });
+
+  it('с onClick — стрелка по умолчанию', () => {
+    render(<Option title="Москва" onClick={() => {}} />);
+    expect(screen.getByText('→')).toBeInTheDocument();
   });
 
   it('disabled — клик не срабатывает', async () => {

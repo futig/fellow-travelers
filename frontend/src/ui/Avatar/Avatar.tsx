@@ -6,9 +6,11 @@ interface Props {
   loading?: boolean;
   /** Диаметр в px; по умолчанию 128 (экран профиля), в списках — 32. */
   size?: number;
+  /** Декоративный (рядом есть имя): скрыт от скринридера, без подписи «Нет фото». */
+  decorative?: boolean;
 }
 
-export function Avatar({ src, loading = false, size = 128 }: Props) {
+export function Avatar({ src, loading = false, size = 128, decorative = false }: Props) {
   const [failedSrc, setFailedSrc] = useState<string | null>(null);
   const showImage = !!src && src !== failedSrc;
 
@@ -16,6 +18,7 @@ export function Avatar({ src, loading = false, size = 128 }: Props) {
     <div
       className={`${styles.avatar} ${loading ? styles.loading : ''}`}
       style={size === 128 ? undefined : { width: size, height: size }}
+      aria-hidden={decorative || undefined}
     >
       {showImage ? (
         <img className={styles.image} src={src} alt="" onError={() => setFailedSrc(src)} />
@@ -24,8 +27,8 @@ export function Avatar({ src, loading = false, size = 128 }: Props) {
           <span
             className={styles.placeholder}
             style={size === 128 ? undefined : { fontSize: size / 2 }}
-            role="img"
-            aria-label="Нет фото"
+            role={decorative ? undefined : 'img'}
+            aria-label={decorative ? undefined : 'Нет фото'}
           >
             🤷🏻
           </span>
