@@ -388,16 +388,43 @@ describe('MyTrip', () => {
       expect(api.cancelMyApplication).toHaveBeenCalledWith(EVENT_ID);
     });
 
-    it('после отъезда — только «Хорошей дороги», без действий и отметок', async () => {
+    it.each(['searching', 'solo', 'cancelled'] as const)(
+      'после отъезда (%s) — только «Хорошей дороги», без действий',
+      async (status) => {
+        renderMyTrip(
+          makeMyTrip({
+            application: makeApplication({ status, departed_at: '2026-08-22T12:50:00+03:00' }),
+          }),
+          '2026-08-22T13:00:00+03:00',
+        );
+        expect(await title('Хорошей дороги!')).toBeInTheDocument();
+        expect(screen.getByText('Вы отметили отъезд. Хорошей дороги!')).toBeInTheDocument();
+        for (const name of [
+          /Изменить данные/,
+          /Поеду один/,
+          'Отменить участие',
+          /Я на месте/,
+          /Найти попутчиков/,
+          'Вернуться в поиск',
+          'Обновить',
+        ]) {
+          expect(screen.queryByRole('button', { name })).not.toBeInTheDocument();
+        }
+        expect(screen.queryByText('Пока никого не нашли')).not.toBeInTheDocument();
+      },
+    );
+
+    it('после отъезда при assigned список попутчиков остаётся', async () => {
+      const data = assigned();
       renderMyTrip(
-        makeMyTrip({ application: makeApplication({ departed_at: '2026-08-22T12:50:00+03:00' }) }),
+        {
+          ...data,
+          application: { ...data.application!, departed_at: '2026-08-22T12:50:00+03:00' },
+        },
         '2026-08-22T13:00:00+03:00',
       );
-      expect(await title('Хорошей дороги!')).toBeInTheDocument();
-      expect(screen.getByText('Вы отметили отъезд. Хорошей дороги!')).toBeInTheDocument();
-      for (const name of [/Изменить данные/, /Поеду один/, 'Отменить участие', /Я на месте/]) {
-        expect(screen.queryByRole('button', { name })).not.toBeInTheDocument();
-      }
+      expect(await screen.findByRole('list', { name: 'Попутчики' })).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /Поеду один/ })).not.toBeInTheDocument();
     });
   });
 });

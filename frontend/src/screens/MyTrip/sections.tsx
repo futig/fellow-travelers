@@ -55,6 +55,9 @@ export function FellowsSection({
   onResume,
   pending,
 }: FellowsProps) {
+  const together = app.status === 'assigned' && transfer !== null;
+  // После «Уехал» действия недоступны (409 ALREADY_DEPARTED): остаётся только список попутчиков.
+  if (app.departed_at && !together) return null;
   if (app.status === 'cancelled') {
     return (
       <section className={styles.card}>
