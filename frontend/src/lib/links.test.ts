@@ -109,14 +109,47 @@ describe('shareUrl / copyToClipboard', () => {
 });
 
 describe('isTelegramChatUrl', () => {
-  it('только https://t.me/<путь>', () => {
-    expect(isTelegramChatUrl('https://t.me/+AbCdEf')).toBe(true);
-    expect(isTelegramChatUrl('https://t.me/joinchat/abc')).toBe(true);
-    expect(isTelegramChatUrl('https://t.me/')).toBe(false);
-    expect(isTelegramChatUrl('http://t.me/chat')).toBe(false);
-    expect(isTelegramChatUrl('https://t.me.evil.com/chat')).toBe(false);
-    expect(isTelegramChatUrl('https://evil.com/t.me/chat')).toBe(false);
-    expect(isTelegramChatUrl('javascript:alert(1)')).toBe(false);
-    expect(isTelegramChatUrl('t.me/chat')).toBe(false);
+  it.each([
+    'https://t.me/+AbCdEf',
+    'https://t.me/+Ab_C-d',
+    'https://t.me/joinchat/abc-DEF_1',
+    'https://t.me/geleng_chat',
+    'https://t.me/Abcde',
+    `https://t.me/a${'b'.repeat(31)}`,
+  ])('чат: %s', (url) => {
+    expect(isTelegramChatUrl(url)).toBe(true);
+  });
+
+  it.each([
+    ['пустой путь', 'https://t.me/'],
+    ['http', 'http://t.me/chat_room'],
+    ['чужой домен', 'https://t.me.evil.com/chat_room'],
+    ['t.me в пути', 'https://evil.com/t.me/chat_room'],
+    ['поддомен', 'https://www.t.me/chat_room'],
+    ['без схемы', 't.me/chat_room'],
+    ['javascript', 'javascript:alert(1)'],
+    ['прокси', 'https://t.me/proxy?server=1.2.3.4&port=443&secret=abc'],
+    ['прокси без query', 'https://t.me/proxy'],
+    ['socks', 'https://t.me/socks?server=1.2.3.4'],
+    ['share', 'https://t.me/share/url?url=https://evil.com'],
+    ['share без пути', 'https://t.me/share'],
+    ['бот со start', 'https://t.me/some_bot?start=abc'],
+    ['фрагмент', 'https://t.me/chat_room#frag'],
+    ['пустой query', 'https://t.me/chat_room?'],
+    ['стикеры', 'https://t.me/addstickers/pack'],
+    ['addlist', 'https://t.me/addlist'],
+    ['служебное имя в другом регистре', 'https://t.me/ProXy'],
+    ['iv', 'https://t.me/iv?url=x'],
+    ['$slug', 'https://t.me/$invoice_slug'],
+    ['короткий username', 'https://t.me/abcd'],
+    ['username с цифры', 'https://t.me/1abcde'],
+    ['слишком длинный username', `https://t.me/a${'b'.repeat(32)}`],
+    ['вложенный путь', 'https://t.me/chat_room/123'],
+    ['пустой hash', 'https://t.me/+'],
+    ['пустой joinchat', 'https://t.me/joinchat/'],
+    ['пробел в конце', 'https://t.me/chat_room '],
+    ['длиннее 200', `https://t.me/+${'a'.repeat(200)}`],
+  ])('не чат (%s): %s', (_, url) => {
+    expect(isTelegramChatUrl(url)).toBe(false);
   });
 });

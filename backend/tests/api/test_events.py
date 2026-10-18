@@ -88,6 +88,7 @@ async def test_create_event_with_pickup_point_and_chat(api_client: AsyncClient, 
         ({"meeting_point": {"address": "A", "lat": 91, "lon": 0}}, "meeting_point.lat"),
         ({"surprise": 1}, "surprise"),
         ({"chat_url": "ftp://example.com/x"}, "chat_url"),
+        ({"chat_url": "https://t.me/" + "a" * 200}, "chat_url"),
         ({"meeting_instruction": "x" * 2001}, "meeting_instruction"),
     ],
 )
@@ -102,6 +103,53 @@ async def test_create_event_validation(
     assert_contract(response, "POST", "/events")
     assert response.json()["error"]["code"] == "VALIDATION_ERROR"
     assert field in error_fields(response)
+
+
+VALID_CHAT_URLS = [
+    "https://t.me/my_group_chat",
+    "https://t.me/+AbC-12_x",
+    "https://t.me/joinchat/AbC123",
+]
+INVALID_CHAT_URLS = [
+    "http://t.me/chat_name",
+    "https://evil.example/x",
+    "https://t.me.evil.com/chat_name",
+    "https://t.me/proxy?server=1",
+    "https://t.me/proxy",
+    "https://t.me/Share",
+    "https://t.me/chat_name?start=1",
+    "https://t.me/abc",
+    "https://t.me/",
+    "javascript:alert(1)",
+]
+CHAT_URL_MESSAGE = "Укажите ссылку на чат в Telegram (https://t.me/…)"
+
+
+@pytest.mark.parametrize("chat_url", VALID_CHAT_URLS)
+async def test_create_event_accepts_telegram_chat_url(
+    api_client: AsyncClient, user: User, chat_url: str
+) -> None:
+    response = await api_client.post(
+        "/events", json=event_payload(chat_url=chat_url), headers=auth_headers()
+    )
+
+    assert response.status_code == 201
+    assert_contract(response, "POST", "/events")
+    assert response.json()["chat_url"] == chat_url
+
+
+@pytest.mark.parametrize("chat_url", INVALID_CHAT_URLS)
+async def test_create_event_rejects_non_telegram_chat_url(
+    api_client: AsyncClient, user: User, chat_url: str
+) -> None:
+    response = await api_client.post(
+        "/events", json=event_payload(chat_url=chat_url), headers=auth_headers()
+    )
+
+    assert response.status_code == 422
+    assert_contract(response, "POST", "/events")
+    assert response.json()["error"]["code"] == "VALIDATION_ERROR"
+    assert error_fields(response)["chat_url"] == CHAT_URL_MESSAGE
 
 
 async def test_create_event_dates_message(api_client: AsyncClient, user: User) -> None:
@@ -232,7 +280,7 @@ async def test_get_event_invalid_uuid_is_422(api_client: AsyncClient, user: User
 async def test_patch_updates_only_given_field(
     api_client: AsyncClient, db_session: AsyncSession, user: User
 ) -> None:
-    event = await make_event(db_session, admin_id=user.id, chat_url="https://example.com/chat")
+    event = await make_event(db_session, admin_id=user.id, chat_url="https://t.me/my_group_chat")
 
     response = await api_client.patch(
         f"/events/{event.id}", json={"title": "Новое имя"}, headers=auth_headers()
@@ -246,7 +294,7 @@ async def test_patch_updates_only_given_field(
     assert body["ends_on"] == "2026-11-14"
     assert body["meeting_point"]["address"] == "Терминал D"
     assert body["destination"]["address"] == "Отель"
-    assert body["chat_url"] == "https://example.com/chat"
+    assert body["chat_url"] == "https://t.me/my_group_chat"
     assert body["join_open"] is True
 
 
@@ -296,7 +344,7 @@ async def test_patch_null_pickup_point_resets_it(
 async def test_patch_null_chat_url_removes_it(
     api_client: AsyncClient, db_session: AsyncSession, user: User
 ) -> None:
-    event = await make_event(db_session, admin_id=user.id, chat_url="https://example.com/chat")
+    event = await make_event(db_session, admin_id=user.id, chat_url="https://t.me/my_group_chat")
 
     response = await api_client.patch(
         f"/events/{event.id}", json={"chat_url": None}, headers=auth_headers()
@@ -304,6 +352,36 @@ async def test_patch_null_chat_url_removes_it(
 
     assert_contract(response, "PATCH", "/events/{event_id}")
     assert response.json()["chat_url"] is None
+
+
+@pytest.mark.parametrize("chat_url", VALID_CHAT_URLS)
+async def test_patch_accepts_telegram_chat_url(
+    api_client: AsyncClient, db_session: AsyncSession, user: User, chat_url: str
+) -> None:
+    event = await make_event(db_session, admin_id=user.id)
+
+    response = await api_client.patch(
+        f"/events/{event.id}", json={"chat_url": chat_url}, headers=auth_headers()
+    )
+
+    assert response.status_code == 200
+    assert_contract(response, "PATCH", "/events/{event_id}")
+    assert response.json()["chat_url"] == chat_url
+
+
+@pytest.mark.parametrize("chat_url", INVALID_CHAT_URLS)
+async def test_patch_rejects_non_telegram_chat_url(
+    api_client: AsyncClient, db_session: AsyncSession, user: User, chat_url: str
+) -> None:
+    event = await make_event(db_session, admin_id=user.id)
+
+    response = await api_client.patch(
+        f"/events/{event.id}", json={"chat_url": chat_url}, headers=auth_headers()
+    )
+
+    assert response.status_code == 422
+    assert_contract(response, "PATCH", "/events/{event_id}")
+    assert error_fields(response)["chat_url"] == CHAT_URL_MESSAGE
 
 
 async def test_patch_join_open_false(

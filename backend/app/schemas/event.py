@@ -1,7 +1,7 @@
+import re
 import uuid
 from datetime import date
 from typing import Annotated, Any
-from urllib.parse import urlsplit
 
 from pydantic import (
     BaseModel,
@@ -19,14 +19,35 @@ Title = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, ma
 MeetingInstruction = Annotated[str, StringConstraints(max_length=2000)]
 
 DATES_ORDER_MESSAGE = "Дата окончания раньше даты начала"
+CHAT_URL_MESSAGE = "Укажите ссылку на чат в Telegram (https://t.me/…)"
+CHAT_URL_RE = re.compile(
+    r"https://t\.me/(?:\+[A-Za-z0-9_-]+|joinchat/[A-Za-z0-9_-]+|(?P<username>[A-Za-z][A-Za-z0-9_]{4,31}))"
+)
+RESERVED_TME_PATHS = frozenset(
+    {
+        "proxy",
+        "socks",
+        "share",
+        "addstickers",
+        "addemoji",
+        "addtheme",
+        "addlist",
+        "setlanguage",
+        "login",
+        "confirmphone",
+        "invoice",
+        "boost",
+        "iv",
+    }
+)
 
 
 def _check_chat_url(value: str | None) -> str | None:
     if value is None:
         return None
-    parts = urlsplit(value)
-    if parts.scheme not in ("http", "https") or not parts.netloc:
-        raise ValueError("Ссылка должна начинаться с http:// или https://")
+    match = CHAT_URL_RE.fullmatch(value)
+    if match is None or (match.group("username") or "").lower() in RESERVED_TME_PATHS:
+        raise ValueError(CHAT_URL_MESSAGE)
     return value
 
 
@@ -47,7 +68,7 @@ class EventCreate(BaseModel):
     pickup_point: Point | None = None
     destination: Point
     meeting_instruction: MeetingInstruction
-    chat_url: str | None = None
+    chat_url: Annotated[str, StringConstraints(max_length=200)] | None = None
 
     _ends_not_before_start = field_validator("ends_on")(_check_dates_order)
     _chat_url_scheme = field_validator("chat_url")(_check_chat_url)
@@ -68,7 +89,7 @@ class EventUpdate(BaseModel):
     pickup_point: Point | None = None
     destination: Point | None = None
     meeting_instruction: MeetingInstruction | None = None
-    chat_url: str | None = None
+    chat_url: Annotated[str, StringConstraints(max_length=200)] | None = None
     join_open: bool | None = None
 
     @field_validator(

@@ -96,6 +96,22 @@ describe('CreateEvent', () => {
     );
   });
 
+  it('ссылка на прокси t.me — ошибка с примерами допустимых ссылок', async () => {
+    renderCreate();
+    const user = await fillRequired();
+    const chat = screen.getByLabelText('Ссылка на общий чат');
+
+    await user.type(chat, 'https://t.me/proxy?server=1.2.3.4&port=443&secret=abc');
+    await user.click(submit());
+    expect(chat).toHaveAccessibleDescription(
+      expect.stringContaining(
+        'Укажите ссылку на чат в Telegram: https://t.me/имя_чата, https://t.me/+… или https://t.me/joinchat/…',
+      ),
+    );
+    expect(chat).toHaveAttribute('aria-invalid', 'true');
+    expect(createEvent).not.toHaveBeenCalled();
+  });
+
   it('422: details.fields — под поля, message — под кнопку', async () => {
     createEvent.mockRejectedValue(
       new ApiError(422, 'VALIDATION_ERROR', 'Проверьте введённые данные', {

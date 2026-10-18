@@ -22,7 +22,8 @@ export const TITLE_MAX = 200;
 export const ADDRESS_MAX = 500;
 export const INSTRUCTION_MAX = 2000;
 
-export const CHAT_URL_ERROR = 'Укажите ссылку на чат в Telegram (https://t.me/…)';
+export const CHAT_URL_ERROR =
+  'Укажите ссылку на чат в Telegram: https://t.me/имя_чата, https://t.me/+… или https://t.me/joinchat/…';
 
 export const EMPTY_EVENT_FORM: EventFormValues = {
   title: '',

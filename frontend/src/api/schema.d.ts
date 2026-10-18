@@ -528,12 +528,18 @@ export interface components {
             destination: components["schemas"]["Point"];
             /** @example Встречаемся у стойки информации у выхода № 3 */
             meeting_instruction: string;
-            /**
-             * Format: uri
-             * @description MVP: ссылка на общий чат (необязательно)
-             */
-            chat_url?: string | null;
+            /** @description Ссылка на общий чат в Telegram (необязательно) */
+            chat_url?: components["schemas"]["ChatUrl"] | null;
         };
+        /**
+         * @description Только ссылка на чат или канал Telegram, без query и фрагмента:
+         *     `https://t.me/<username>` (5–32 символа, начинается с буквы), `https://t.me/+<hash>`,
+         *     `https://t.me/joinchat/<hash>`. Служебные пути t.me не принимаются, даже если подходят
+         *     под шаблон username: proxy, socks, share, addstickers, addemoji, addtheme, addlist,
+         *     setlanguage, login, confirmphone, invoice, boost, iv (→ 422 VALIDATION_ERROR).
+         * @example https://t.me/+AbCdEf123
+         */
+        ChatUrl: string;
         /** @description Частичное обновление — любые поля EventCreate + join_open */
         EventUpdate: {
             title?: string;
@@ -545,8 +551,7 @@ export interface components {
             pickup_point?: components["schemas"]["Point"] | null;
             destination?: components["schemas"]["Point"];
             meeting_instruction?: string;
-            /** Format: uri */
-            chat_url?: string | null;
+            chat_url?: components["schemas"]["ChatUrl"] | null;
             /** @description MVP: false — закрыть вступление */
             join_open?: boolean;
         };
