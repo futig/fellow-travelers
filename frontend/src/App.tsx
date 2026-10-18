@@ -9,11 +9,11 @@ import { AdminInvite } from './screens/AdminInvite/AdminInvite';
 import { ApplicationWizard } from './screens/ApplicationWizard/ApplicationWizard';
 import { CreateEvent } from './screens/CreateEvent/CreateEvent';
 import { RouteError } from './screens/ErrorScreen/RouteError';
-import { GroupPlaceholder } from './screens/GroupPlaceholder/GroupPlaceholder';
 import { EventSettings } from './screens/EventSettings/EventSettings';
 import { Home } from './screens/Home/Home';
 import { Invite } from './screens/Invite/Invite';
 import { Join } from './screens/Join/Join';
+import { MyTrip } from './screens/MyTrip/MyTrip';
 import { Profile } from './screens/Profile/Profile';
 import { TripForm } from './screens/TripForm/TripForm';
 import { Trips } from './screens/Trips/Trips';
@@ -33,8 +33,7 @@ export const routes: RouteObject[] = [
       { path: '/invite/:code', element: <Invite /> },
       // `/events/new` — до `/events/:id` (для читаемости; роутер и так ранжирует статический сегмент выше).
       { path: '/events/new', element: <CreateEvent /> },
-      // Заглушка до «Моей поездки» (инкремент 5).
-      { path: '/events/:id', element: <GroupPlaceholder /> },
+      { path: '/events/:id', element: <MyTrip /> },
       // Мастер заявки: шаги — внутреннее состояние экрана, а не записи истории.
       { path: '/events/:id/apply', element: <ApplicationWizard /> },
       { path: '/events/:id/admin', element: <AdminHub /> },
