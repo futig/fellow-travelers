@@ -6,7 +6,13 @@ import { makeTrip } from '../test/fixtures';
 import { fetchAdminParticipants } from './admin';
 import { upsertMyApplication } from './applications';
 import { ApiError, NoInitDataError, shouldRetry, toApiError } from './errors';
-import { useLocations, useUpsertApplication } from './hooks';
+import {
+  useDeleteTrip,
+  useJoin,
+  useLocations,
+  useUpdateEvent,
+  useUpsertApplication,
+} from './hooks';
 import { queryKeys } from './keys';
 import { fetchMyTrip } from './myTrip';
 import { deleteTrip } from './trips';
@@ -152,7 +158,11 @@ describe('хуки', () => {
     return { client, wrapper };
   }
 
-  it('useUpsertApplication инвалидирует заявку, поездку, мои группы и админку', async () => {
+  function invalidatedKeys(spy: { mock: { calls: unknown[][] } }) {
+    return spy.mock.calls.map(([filters]) => (filters as { queryKey: unknown }).queryKey);
+  }
+
+  it('useUpsertApplication: заявка — из ответа, инвалидируются поездка, мои группы, админка', async () => {
     const { client, wrapper } = setup();
     const spy = vi.spyOn(client, 'invalidateQueries');
     api.PUT.mockResolvedValue(ok(application));
@@ -165,15 +175,55 @@ describe('хуки', () => {
         max_wait_minutes: 15,
       }),
     );
-    const keys = spy.mock.calls.map(([filters]) => filters?.queryKey);
-    expect(keys).toEqual(
-      expect.arrayContaining([
-        queryKeys.myApplication(EVENT_ID),
-        queryKeys.myTrip(EVENT_ID),
-        queryKeys.myEvents,
-        queryKeys.admin(EVENT_ID),
-      ]),
-    );
+    expect(invalidatedKeys(spy)).toEqual([
+      queryKeys.myTrip(EVENT_ID),
+      queryKeys.myEvents,
+      queryKeys.admin(EVENT_ID),
+    ]);
+    expect(client.getQueryData(queryKeys.myApplication(EVENT_ID))).toEqual(application);
+  });
+
+  it('useDeleteTrip: рейсы, заявка, поездка, админка', async () => {
+    const { client, wrapper } = setup();
+    const spy = vi.spyOn(client, 'invalidateQueries');
+    api.DELETE.mockResolvedValue({
+      data: undefined,
+      error: undefined,
+      response: new Response(null, { status: 204 }),
+    });
+    const { result } = renderHook(() => useDeleteTrip(EVENT_ID), { wrapper });
+    await act(() => result.current.mutateAsync('t1'));
+    expect(invalidatedKeys(spy)).toEqual([
+      queryKeys.trips(EVENT_ID),
+      queryKeys.myApplication(EVENT_ID),
+      queryKeys.myTrip(EVENT_ID),
+      queryKeys.admin(EVENT_ID),
+    ]);
+  });
+
+  it('useUpdateEvent: группа — из ответа, инвалидируются мои группы и поездка', async () => {
+    const { client, wrapper } = setup();
+    const spy = vi.spyOn(client, 'invalidateQueries');
+    const event = { id: EVENT_ID, title: 'Конференция' };
+    api.PATCH.mockResolvedValue(ok(event));
+    const { result } = renderHook(() => useUpdateEvent(EVENT_ID), { wrapper });
+    await act(() => result.current.mutateAsync({ title: 'Конференция' }));
+    expect(invalidatedKeys(spy)).toEqual([queryKeys.myEvents, queryKeys.myTrip(EVENT_ID)]);
+    expect(client.getQueryData(queryKeys.event(EVENT_ID))).toEqual(event);
+  });
+
+  it('useJoin: мои группы, превью приглашения, поездка, админка', async () => {
+    const { client, wrapper } = setup();
+    const spy = vi.spyOn(client, 'invalidateQueries');
+    api.POST.mockResolvedValue(ok({ id: EVENT_ID, title: 'Конференция' }, 201));
+    const { result } = renderHook(() => useJoin(), { wrapper });
+    await act(() => result.current.mutateAsync('k7q2zp'));
+    expect(invalidatedKeys(spy)).toEqual([
+      queryKeys.myEvents,
+      queryKeys.invitePreview('K7Q2ZP'),
+      queryKeys.myTrip(EVENT_ID),
+      queryKeys.admin(EVENT_ID),
+    ]);
   });
 
   it('useLocations: короче 2 символов запрос не уходит', async () => {

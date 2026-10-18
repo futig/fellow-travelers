@@ -118,11 +118,10 @@ function afterEventChange(client: QueryClient, event: Event) {
   return invalidate(client, [queryKeys.myEvents, queryKeys.myTrip(event.id)]);
 }
 
-/** После изменения заявки: моя заявка и поездка, список групп (статус), админские списки. */
+/** После изменения заявки: заявка — из ответа; поездка, список групп (статус), админские списки. */
 function afterApplicationChange(client: QueryClient, eventId: string, app: Application) {
   client.setQueryData(queryKeys.myApplication(eventId), app);
   return invalidate(client, [
-    queryKeys.myApplication(eventId),
     queryKeys.myTrip(eventId),
     queryKeys.myEvents,
     queryKeys.admin(eventId),
