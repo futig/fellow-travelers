@@ -1,0 +1,12 @@
+.join {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-top: 32px;
+}
+
+.error {
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--text-error);
+}

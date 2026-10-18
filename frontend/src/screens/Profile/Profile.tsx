@@ -4,6 +4,7 @@ import { isUnauthorized } from '../../api/errors';
 import { fetchMe, meQueryKey } from '../../api/me';
 import { formatName, formatPhone } from '../../lib/format';
 import { getInitDataPhotoUrl } from '../../lib/telegram';
+import { useBack } from '../../lib/useBack';
 import { Avatar } from '../../ui/Avatar/Avatar';
 import { Button } from '../../ui/Button/Button';
 import { Field, FieldSkeleton } from '../../ui/Field/Field';
@@ -22,8 +23,21 @@ const HEADER = {
 const NO_PHONE_HINT =
   'Телефон нужен, чтобы попутчики могли с вами связаться. Без него нельзя отправить заявку.';
 
+/** Экран `/profile`: шаг «Ваши данные» сам по себе, «Далее» — на «Мои группы». */
 export function Profile() {
   const navigate = useNavigate();
+  useBack('/');
+  return <ProfileForm onNext={() => void navigate('/')} />;
+}
+
+interface Props {
+  onNext: () => void;
+  /** Сообщение над кнопкой (например, бэкенд ответил PHONE_REQUIRED). */
+  notice?: string | null;
+}
+
+/** Шаг 1 «Ваши данные»: профиль из /me и «Поделиться номером»; «Далее» — только с телефоном. */
+export function ProfileForm({ onNext, notice }: Props) {
   const {
     data: me,
     error,
@@ -60,13 +74,7 @@ export function Profile() {
 
   if (error) {
     if (isUnauthorized(error)) return <OpenInTelegramScreen />;
-    return (
-      <ErrorScreen
-        title="Что-то пошло не так"
-        text={error.message}
-        onRetry={() => void refetch()}
-      />
-    );
+    return <ErrorScreen text={error.message} onRetry={() => void refetch()} />;
   }
 
   return (
@@ -91,8 +99,13 @@ export function Profile() {
           </Button>
         )}
       </div>
+      {notice && (
+        <p className={styles.notice} role="alert">
+          {notice}
+        </p>
+      )}
       <div className={styles.footer}>
-        <Button disabled={!me.has_phone} arrow="→" onClick={() => void navigate('/home')}>
+        <Button disabled={!me.has_phone} arrow="→" onClick={onNext}>
           Далее
         </Button>
       </div>

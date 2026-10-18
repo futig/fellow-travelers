@@ -345,7 +345,9 @@ paths:
       description: |
         Первый вызов создаёт заявку в статусе `searching` и запускает подбор; повторный — обновляет её
         (вторая заявка не создаётся). Заявка в статусе `cancelled` при PUT возвращается в `searching`.
-        pre-MVP: при статусе `assigned` → 409 APPLICATION_LOCKED.
+        Поле `seek_companions` задаёт статус явно: `false` → `solo` без подбора (так можно сразу
+        создать заявку «еду самостоятельно»), `true` → `searching` с подбором.
+        pre-MVP: при статусе `assigned` → 409 APPLICATION_LOCKED (независимо от `seek_companions`).
         MVP: изменение назначенной заявки — проверка совместимости, при несовместимости заявка выходит
         из трансфера и снова ищет попутчиков.
         После «Уехал» → 409 ALREADY_DEPARTED.
@@ -809,9 +811,22 @@ components:
           maxLength: 2000
           example: Встречаемся у стойки информации у выхода № 3
         chat_url:
-          type: [string, 'null']
-          format: uri
-          description: 'MVP: ссылка на общий чат (необязательно)'
+          description: 'Ссылка на общий чат в Telegram (необязательно)'
+          oneOf:
+            - $ref: '#/components/schemas/ChatUrl'
+            - type: 'null'
+
+    ChatUrl:
+      type: string
+      description: |
+        Только ссылка на чат или канал Telegram, без query и фрагмента:
+        `https://t.me/<username>` (5–32 символа, начинается с буквы), `https://t.me/+<hash>`,
+        `https://t.me/joinchat/<hash>`. Служебные пути t.me не принимаются, даже если подходят
+        под шаблон username: proxy, socks, share, addstickers, addemoji, addtheme, addlist,
+        setlanguage, login, confirmphone, invoice, boost, iv (→ 422 VALIDATION_ERROR).
+      pattern: '^https://t\.me/(\+[A-Za-z0-9_-]+|joinchat/[A-Za-z0-9_-]+|[A-Za-z][A-Za-z0-9_]{4,31})$'
+      maxLength: 200
+      example: https://t.me/+AbCdEf123
 
     EventUpdate:
       type: object
@@ -827,7 +842,10 @@ components:
             - type: 'null'
         destination: { $ref: '#/components/schemas/Point' }
         meeting_instruction: { type: string, maxLength: 2000 }
-        chat_url: { type: [string, 'null'], format: uri }
+        chat_url:
+          oneOf:
+            - $ref: '#/components/schemas/ChatUrl'
+            - type: 'null'
         join_open: { type: boolean, description: 'MVP: false — закрыть вступление' }
 
     Event:
@@ -987,6 +1005,12 @@ components:
           maximum: 2
           description: Места регистрируемого багажа суммарно на автора и спутника
         max_wait_minutes: { $ref: '#/components/schemas/WaitMinutes' }
+        seek_companions:
+          type: boolean
+          description: |
+            Искать ли попутчиков. Не передано — статус меняется как раньше (см. описание PUT).
+            `false` — заявка сохраняется в статусе `solo`, подбор не запускается (в том числе при первом PUT).
+            `true` — заявка переходит в `searching` (из `solo` и `cancelled` тоже) и запускается подбор.
 
     Application:
       type: object

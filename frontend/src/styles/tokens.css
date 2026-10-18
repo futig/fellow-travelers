@@ -1,16 +1,23 @@
 :root {
   --surface-low: #eef2f9; /* фон страницы */
   --surface-base: #ffffff; /* фон аватара, неактивные сегменты прогресса */
-  --shape-base: #ffffff; /* фон инпутов */
+  --shape-base: #ffffff; /* фон инпутов, карточек */
   --shape-accent: #1769e0; /* кнопка primary */
   --shape-accent-disabled: #c5d8f4;
+  --shape-dark: #333333; /* тёмная кнопка, активная вкладка */
   --line-accent: #1769e0; /* активный сегмент прогресса */
+  --line-base: #d9d9d9; /* разделители */
   --text-heavy: #333333;
   --text-soft: #6e7b87;
+  --text-pale: #8da0b1;
   --text-accent: #1769e0;
+  --text-success: #12a64e;
+  --text-error: #e53820;
   --text-inverted-heavy: #ffffff;
-  --radius-m: 8px;
+  --radius-m: 8px; /* кнопки, инпуты */
+  --radius-l: 12px; /* карточки */
 
   --font-body: 'Arimo', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   --font-heading: 'Martian Grotesk', 'Arimo', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: 'Martian Mono', ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
 }

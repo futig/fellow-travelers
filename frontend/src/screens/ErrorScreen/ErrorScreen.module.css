@@ -1,3 +1,8 @@
+.box {
+  display: flex;
+  flex-direction: column;
+}
+
 .footer {
-  padding-top: 24px;
+  padding-top: 16px;
 }

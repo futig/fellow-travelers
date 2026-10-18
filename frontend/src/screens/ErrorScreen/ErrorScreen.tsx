@@ -1,23 +1,45 @@
 import { Button } from '../../ui/Button/Button';
+import { EmptyState } from '../../ui/EmptyState/EmptyState';
 import { Screen } from '../../ui/Screen/Screen';
-import { ScreenHeader } from '../../ui/ScreenHeader/ScreenHeader';
 import styles from './ErrorScreen.module.css';
 
 interface Props {
-  title: string;
+  title?: string;
   text: string;
   onRetry?: () => void;
+  /** Своё действие вместо «Повторить попытку» (например «Мои группы»). */
+  action?: { label: string; onClick: () => void };
 }
 
-export function ErrorScreen({ title, text, onRetry }: Props) {
+/** Карточка ошибки без экрана — для блока внутри экрана (вкладка): 👀, текст и действие. */
+export function ErrorCard({
+  title = 'Не удалось загрузить страницу',
+  text,
+  onRetry,
+  action,
+}: Props) {
+  const button = action ?? (onRetry && { label: 'Повторить попытку', onClick: onRetry });
   return (
-    <Screen>
-      <ScreenHeader title={title} subtitle={text} />
-      {onRetry && (
+    <>
+      <div className={styles.box} role="alert">
+        <EmptyState title={title} text={text} />
+      </div>
+      {button && (
         <div className={styles.footer}>
-          <Button onClick={onRetry}>Повторить</Button>
+          <Button onClick={button.onClick} arrow="→">
+            {button.label}
+          </Button>
         </div>
       )}
+    </>
+  );
+}
+
+/** Страница ошибки: карточка 👀 с заголовком и текстом, «Повторить попытку →». */
+export function ErrorScreen(props: Props) {
+  return (
+    <Screen center>
+      <ErrorCard {...props} />
     </Screen>
   );
 }

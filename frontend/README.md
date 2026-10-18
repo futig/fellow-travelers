@@ -1,13 +1,17 @@
 # Фронтенд: Telegram Mini App
 
 Мини-приложение сервиса поиска попутчиков. Контракт с бэкендом — `../docs/contracts/` (источник истины — `openapi.yaml`).
-Сейчас реализован начальный экран «Ваши данные» (CAP-01) и заглушка «Мои группы».
+Сейчас реализованы «Ваши данные» (CAP-01), «Мои группы», ввод кода и превью приглашения со вступлением,
+создание группы и управление ей (настройки, приглашение, рейсы группы), мастер заявки (`/events/:id/apply`,
+`?step=review` — сразу сводка) «Моя поездка» (`/events/:id`: рейс, попутчики, отметки, такси, действия
+с подтверждениями) и вкладки управления «Участники» / «Трансферы» (`/events/:id/admin?tab=…`: сводка, фильтры
+в URL, карточки участников, составы трансферов `/events/:id/admin/transfers/:tid`).
 
 ## Стек
 
 Vite, React 19, TypeScript (strict), npm. `@telegram-apps/sdk-react` (SDK Telegram), `openapi-fetch` +
 `openapi-typescript` (типы из контракта), TanStack Query, React Router (memory router), CSS Modules.
-Шрифты локальные: Arimo (`@fontsource/arimo`) и Martian Grotesk (OFL, `src/assets/fonts/`).
+Шрифты локальные: Arimo (`@fontsource/arimo`), Martian Mono (`@fontsource/martian-mono`) и Martian Grotesk (OFL, `src/assets/fonts/`).
 
 ## Команды
 
@@ -68,6 +72,8 @@ Telegram открывает мини-приложения только по HTTP
 Docker-образ собирается в два этапа (`node:24-alpine` -> `nginx:1.27-alpine`), статика отдаётся nginx
 (`nginx.conf`): `/api/` проксируется на сервис `api:8000`, `/assets/` кешируется навсегда, остальное —
 fallback на `index.html`.
+Защитные заголовки (CSP, `nosniff`, `Referrer-Policy`) — в `security-headers.conf`; он подключается
+в `server` и в каждом `location` со своим `add_header`. Inline-скриптов в сборке нет (`script-src 'self'`).
 
 ```bash
 cd ../backend

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseStartParam } from './startParam';
+import { parseStartParam, startParamToPath } from './startParam';
 
 const UUID = '3f2b8c1e-5a4d-4e6f-8a9b-0c1d2e3f4a5b';
 
@@ -45,5 +45,18 @@ describe('parseStartParam', () => {
     'мусор',
   ])('мусор %s → none', (raw) => {
     expect(parseStartParam(raw)).toEqual({ kind: 'none' });
+  });
+});
+
+describe('startParamToPath', () => {
+  it.each([
+    ['join_ab12cd', '/invite/AB12CD'],
+    [`event_${UUID}`, `/events/${UUID}`],
+    [`admin_${UUID}`, `/events/${UUID}/admin`],
+    ['admin', '/?filter=admin'],
+    [undefined, '/'],
+    ['мусор', '/'],
+  ])('%s → %s', (raw, path) => {
+    expect(startParamToPath(parseStartParam(raw))).toBe(path);
   });
 });
