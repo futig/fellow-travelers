@@ -25,9 +25,36 @@ describe('FlightInfo', () => {
     });
     render(<FlightInfo trip={trip} showSource />);
     expect(screen.getByText('● Задержан')).toBeInTheDocument();
-    expect(screen.getByText(/13:10/)).toBeInTheDocument();
+    expect(screen.getByText(/13:10/)).toHaveClass('late');
     expect(screen.getByText(/12:25/).closest('s')).not.toBeNull();
     expect(screen.getByText('Расписание внесено организатором')).toBeInTheDocument();
+  });
+
+  it('status=delayed без расчётного времени: «Задержан», без зачёркнутого времени', () => {
+    render(<FlightInfo trip={makeTrip({ status: 'delayed' })} />);
+    expect(screen.getByText('● Задержан')).toBeInTheDocument();
+    expect(screen.getByText(/12:25/).closest('s')).toBeNull();
+    expect(screen.getAllByText(/12:25/)).toHaveLength(1);
+  });
+
+  it('status=delayed, расчётное совпадает с плановым: без зачёркнутого времени', () => {
+    const trip = makeTrip({ status: 'delayed', estimated_arrival: '2026-08-22T12:25:00+03:00' });
+    render(<FlightInfo trip={trip} />);
+    expect(screen.getByText('● Задержан')).toBeInTheDocument();
+    expect(screen.getAllByText(/12:25/)).toHaveLength(1);
+    expect(document.querySelector('s')).toBeNull();
+  });
+
+  it('раньше срока: «Прилетит раньше», новое время обычным цветом, плановое зачёркнуто', () => {
+    const trip = makeTrip({
+      estimated_arrival: '2026-08-22T12:05:00+03:00',
+      effective_arrival: '2026-08-22T12:05:00+03:00',
+    });
+    render(<FlightInfo trip={trip} />);
+    expect(screen.getByText('● Прилетит раньше')).toHaveClass('success');
+    expect(screen.queryByText(/Задержан/)).not.toBeInTheDocument();
+    expect(screen.getByText(/12:05/)).not.toHaveClass('late');
+    expect(screen.getByText(/12:25/).closest('s')).not.toBeNull();
   });
 
   it('прилёт на следующие сутки — «+1», кнопка правки', async () => {

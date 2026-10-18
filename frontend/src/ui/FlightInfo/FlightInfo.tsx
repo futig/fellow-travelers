@@ -18,16 +18,21 @@ interface Props {
 
 type Tone = 'success' | 'error' | 'accent';
 
-/** Расчётное время прилёта отличается от планового. */
+/** Сдвиг расчётного прилёта относительно планового в мс; 0, если расчётного нет. */
+function arrivalDiffMs(trip: Trip): number {
+  if (!trip.estimated_arrival) return 0;
+  return new Date(trip.estimated_arrival).getTime() - new Date(trip.scheduled_arrival).getTime();
+}
+
+/** Рейс задержан: статус `delayed` или расчётный прилёт позже планового. */
 export function isTripDelayed(trip: Trip): boolean {
-  if (trip.status === 'delayed') return true;
-  if (!trip.estimated_arrival) return false;
-  return new Date(trip.estimated_arrival).getTime() !== new Date(trip.scheduled_arrival).getTime();
+  return trip.status === 'delayed' || arrivalDiffMs(trip) > 0;
 }
 
 function tripStatus(trip: Trip): { text: string; tone: Tone } | null {
   if (trip.status === 'cancelled') return { text: 'Отменён', tone: 'error' };
   if (isTripDelayed(trip)) return { text: 'Задержан', tone: 'error' };
+  if (arrivalDiffMs(trip) < 0) return { text: 'Прилетит раньше', tone: 'success' };
   switch (trip.status) {
     case 'scheduled':
       return { text: 'По расписанию', tone: 'success' };
@@ -45,6 +50,8 @@ export function FlightInfo({ trip, baggageCount, showSource = false, onEdit, edi
   const dep = trip.departure_location;
   const arr = trip.arrival_location;
   const delayed = isTripDelayed(trip);
+  // Плановое время зачёркиваем, только если расчётное известно и отличается.
+  const rescheduled = arrivalDiffMs(trip) !== 0;
   const shift = arrivalDayShift(
     trip.scheduled_departure,
     dep.timezone,
@@ -94,7 +101,7 @@ export function FlightInfo({ trip, baggageCount, showSource = false, onEdit, edi
             {formatTime(trip.effective_arrival, arr.timezone)}
             {shift > 0 && <sup className={styles.shift}>+{shift}</sup>}
           </span>
-          {delayed && (
+          {rescheduled && (
             <s className={styles.planned}>
               <span className={styles.srOnly}>по расписанию </span>
               {formatTime(trip.scheduled_arrival, arr.timezone)}
