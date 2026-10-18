@@ -39,7 +39,8 @@ docker compose up --build        # API на http://localhost:8000, провер�
 
 ## Разработка в браузере без Telegram
 
-Бэкенд принимает только initData, подписанный `BOT_TOKEN`; для разработки её подписывает сам скрипт.
+Короткий путь — `make dev-setup` и `make dev` из корня репозитория (см. [README](../README.md#разработка)).
+Ниже — те же шаги вручную. Бэкенд принимает только initData, подписанный `BOT_TOKEN`; для разработки её подписывает сам скрипт.
 
 ```bash
 # backend/.env: BOT_TOKEN=любая-строка, DEBUG=true (без DEBUG скрипт откажется; обход — --force)
