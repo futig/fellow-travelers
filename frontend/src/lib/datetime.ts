@@ -142,7 +142,7 @@ export function formatDateRange(startsOn: string, endsOn: string): string {
   return `${s.day} ${month(s.month)} ${s.year}`;
 }
 
-const LOCAL_INPUT_RE = /^(\d{4}-\d{2}-\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?/;
+const LOCAL_INPUT_RE = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?$/;
 
 /**
  * Значение `<input type="datetime-local">` (`2026-08-22T08:40`) → строка для API без смещения
@@ -151,7 +151,14 @@ const LOCAL_INPUT_RE = /^(\d{4}-\d{2}-\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?/;
 export function localInputToApi(value: string): string | null {
   const m = LOCAL_INPUT_RE.exec(value);
   if (!m) return null;
-  return `${m[1]}T${m[2]}:${m[3]}:${m[4] ?? '00'}`;
+  const [, y, mo, d, h, mi, sec = '00'] = m;
+  const year = Number(y);
+  const month = Number(mo);
+  const day = Number(d);
+  const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  if (month < 1 || month > 12 || day < 1 || day > daysInMonth) return null;
+  if (Number(h) > 23 || Number(mi) > 59 || Number(sec) > 59) return null;
+  return `${y}-${mo}-${d}T${h}:${mi}:${sec}`;
 }
 
 /** ISO со смещением → значение `<input type="datetime-local">` в поясе аэропорта (`2026-08-22T08:40`). */

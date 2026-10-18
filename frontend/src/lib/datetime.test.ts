@@ -138,6 +138,23 @@ describe('datetime-local ↔ API', () => {
     expect(localInputToApi('мусор')).toBeNull();
   });
 
+  it.each([
+    '2026-08-22T08:40junk',
+    '2026-13-40T25:99',
+    '2026-02-30T10:00',
+    '2026-08-22T24:00',
+    '2026-08-22T08:60',
+    '2026-08-22T08:40:60',
+    '2026-00-10T08:40',
+    'x2026-08-22T08:40',
+  ])('неверное значение %s → null', (value) => {
+    expect(localInputToApi(value)).toBeNull();
+  });
+
+  it('29 февраля високосного года допустимо', () => {
+    expect(localInputToApi('2028-02-29T08:40')).toBe('2028-02-29T08:40:00');
+  });
+
   it('ISO со смещением → местное время аэропорта', () => {
     expect(isoToLocalInput('2026-08-22T07:30:00+05:00', 'Asia/Yekaterinburg')).toBe(
       '2026-08-22T07:30',
@@ -145,5 +162,46 @@ describe('datetime-local ↔ API', () => {
     expect(isoToLocalInput('2026-08-22T02:30:00+00:00', 'Asia/Yekaterinburg')).toBe(
       '2026-08-22T07:30',
     );
+  });
+});
+
+describe('переход на летнее/зимнее время', () => {
+  it('formatTime: Берлин, 25.10.2026 — 02:30 дважды (CEST и CET)', () => {
+    expect(formatTime('2026-10-25T00:30:00Z', 'Europe/Berlin')).toBe('02:30');
+    expect(formatTime('2026-10-25T01:30:00Z', 'Europe/Berlin')).toBe('02:30');
+    expect(formatTime('2026-10-25T02:30:00Z', 'Europe/Berlin')).toBe('03:30');
+  });
+
+  it('isoToLocalInput: Берлин, 29.03.2026 — после перевода стрелок', () => {
+    expect(isoToLocalInput('2026-03-29T00:30:00Z', 'Europe/Berlin')).toBe('2026-03-29T01:30');
+    expect(isoToLocalInput('2026-03-29T01:30:00Z', 'Europe/Berlin')).toBe('2026-03-29T03:30');
+  });
+
+  it('arrivalDayShift: Нью-Йорк → Берлин через ночь перевода часов (08.03.2026)', () => {
+    expect(
+      arrivalDayShift(
+        '2026-03-07T23:00:00-05:00',
+        'America/New_York',
+        '2026-03-08T13:00:00+01:00',
+        'Europe/Berlin',
+      ),
+    ).toBe(1);
+    // Вылет 23:30 EDT в день перехода, прилёт на следующие местные сутки
+    expect(
+      arrivalDayShift(
+        '2026-03-08T23:30:00-04:00',
+        'America/New_York',
+        '2026-03-09T13:30:00+01:00',
+        'Europe/Berlin',
+      ),
+    ).toBe(1);
+    expect(
+      arrivalDayShift(
+        '2026-03-08T03:30:00-04:00',
+        'America/New_York',
+        '2026-03-08T19:30:00+01:00',
+        'Europe/Berlin',
+      ),
+    ).toBe(0);
   });
 });
