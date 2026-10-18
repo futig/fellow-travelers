@@ -1,6 +1,6 @@
 import { useNavigate, useParams } from 'react-router';
 import { isUnauthorized } from '../../api/errors';
-import { useEvent, useInvite, useJoin, useTrips } from '../../api/hooks';
+import { useEvent, useJoinAsParticipant, useTrips } from '../../api/hooks';
 import { formatDateRange, plural } from '../../lib/datetime';
 import { useBack } from '../../lib/useBack';
 import { Button } from '../../ui/Button/Button';
@@ -23,8 +23,7 @@ export function AdminHub() {
   const isAdmin = event?.is_admin === true;
   const trips = useTrips(eventId);
   // Код нужен только админу без участия — чтобы вступить по нему самому.
-  const invite = useInvite(eventId, { enabled: isAdmin && !event?.is_participant });
-  const join = useJoin();
+  const join = useJoinAsParticipant(eventId, { enabled: isAdmin && !event?.is_participant });
 
   if (isPending) {
     return (
@@ -50,8 +49,7 @@ export function AdminHub() {
   const go = (path: string) => () => void navigate(`/events/${eventId}${path}`);
 
   function joinAsParticipant() {
-    if (!invite.data) return;
-    join.mutate(invite.data.code, { onSuccess: () => void navigate(`/events/${eventId}`) });
+    join.join(() => void navigate(`/events/${eventId}`));
   }
 
   return (
@@ -110,15 +108,15 @@ export function AdminHub() {
             </p>
             <Button
               variant="secondary"
-              disabled={!invite.data || join.isPending}
+              disabled={!join.canJoin}
               aria-busy={join.isPending || undefined}
               onClick={joinAsParticipant}
             >
               Вступить как участник
             </Button>
-            {(join.error ?? invite.error) && (
+            {join.error && (
               <p className={styles.error} role="alert">
-                {(join.error ?? invite.error)?.message}
+                {join.error.message}
               </p>
             )}
           </section>

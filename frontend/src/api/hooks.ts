@@ -175,6 +175,25 @@ export function useJoin() {
   });
 }
 
+/**
+ * Админ без участия вступает в свою группу как участник: код берём из `GET /events/{id}/invite`
+ * (запрос — только при `enabled`), затем `POST /invites/{code}/join`.
+ */
+export function useJoinAsParticipant(eventId: string, { enabled }: { enabled: boolean }) {
+  const invite = useInvite(eventId, { enabled });
+  const join = useJoin();
+  const code = invite.data?.code;
+  return {
+    /** Код получен, вступление не идёт. */
+    canJoin: code !== undefined && !join.isPending,
+    isPending: join.isPending,
+    error: join.error ?? invite.error,
+    join: (onSuccess?: () => void) => {
+      if (code) join.mutate(code, { onSuccess: () => onSuccess?.() });
+    },
+  };
+}
+
 export function useCreateTrip(eventId: string) {
   const client = useQueryClient();
   return useMutation({
