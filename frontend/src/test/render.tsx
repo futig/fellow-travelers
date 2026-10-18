@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render } from '@testing-library/react';
 import type { ReactNode } from 'react';
-import { createMemoryRouter, RouterProvider, useLocation } from 'react-router';
+import { createMemoryRouter, RouterProvider, useLocation, type RouteObject } from 'react-router';
 
 /** Показывает текущий путь — для проверки переходов в тестах экранов. */
 function LocationProbe() {
@@ -11,19 +11,18 @@ function LocationProbe() {
 
 /**
  * Рендерит экран по маршруту `path` в memory router; любой другой путь — `LocationProbe`.
- * `history` — записи до начального экрана (по умолчанию экран открыт первым, как по deep link).
+ * `history` — записи до начального экрана (по умолчанию экран открыт первым, как по deep link);
+ * `extraRoutes` — соседние экраны для сценариев из нескольких переходов.
  */
 export function renderRoute(
   path: string,
   element: ReactNode,
   initialPath: string,
   history: string[] = [],
+  extraRoutes: RouteObject[] = [],
 ) {
   const router = createMemoryRouter(
-    [
-      { path, element },
-      { path: '*', element: <LocationProbe /> },
-    ],
+    [{ path, element }, ...extraRoutes, { path: '*', element: <LocationProbe /> }],
     { initialEntries: [...history, initialPath] },
   );
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });

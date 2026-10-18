@@ -13,6 +13,7 @@ function Page({ name }: { name: string }) {
       <p data-testid="page">{`${name} ${location.pathname}`}</p>
       <button onClick={back}>Назад</button>
       <button onClick={() => replace('/b')}>Заменить</button>
+      <button onClick={() => replace('/b', { asFirst: true })}>Заменить как первый</button>
     </>
   );
 }
@@ -55,6 +56,13 @@ describe('useBack', () => {
   it('replace не первого экрана — назад по истории', async () => {
     renderAt(['/home', '/a']);
     await userEvent.click(screen.getByRole('button', { name: 'Заменить' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Назад' }));
+    expect(screen.getByTestId('page')).toHaveTextContent('home /home');
+  });
+
+  it('replace с asFirst — «Назад» на fallback, а не по истории', async () => {
+    renderAt(['/a', '/b', '/a']);
+    await userEvent.click(screen.getByRole('button', { name: 'Заменить как первый' }));
     await userEvent.click(screen.getByRole('button', { name: 'Назад' }));
     expect(screen.getByTestId('page')).toHaveTextContent('home /home');
   });

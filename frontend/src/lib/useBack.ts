@@ -2,10 +2,15 @@ import { useCallback } from 'react';
 import { useLocation, useNavigate, type Location } from 'react-router';
 import { useBackButton } from './useBackButton';
 
+// ВАЖНО: все переходы с `replace` в приложении делаем через `useReplace`, а не `navigate(to, {replace})`:
+// иначе потеряется метка первого экрана и «Назад» на нём перестанет работать.
+
 /** Метка первого экрана в `location.state`: сохраняется при переходах с `replace`. */
 interface FirstEntryState {
   firstEntry: true;
 }
+
+const FIRST_ENTRY: FirstEntryState = { firstEntry: true };
 
 /**
  * Экран открыт первым — назад идти некуда. Memory router даёт ключ `'default'` только
@@ -17,14 +22,27 @@ function isFirstEntry(location: Location): boolean {
   return state?.firstEntry === true;
 }
 
+/** Текущий экран открыт первым: `navigate(-1)` некуда. */
+export function useIsFirstEntry(): boolean {
+  return isFirstEntry(useLocation());
+}
+
+interface ReplaceOptions {
+  /**
+   * Новый экран считать первым: его «Назад» уйдёт на свой fallback, а не на предыдущие записи
+   * (например, после вступления — на «Мои группы», а не обратно на ввод кода).
+   */
+  asFirst?: boolean;
+}
+
 /** Переход с заменой текущей записи, сохраняющий признак «первый экран». */
-export function useReplace(): (to: string) => void {
+export function useReplace(): (to: string, options?: ReplaceOptions) => void {
   const navigate = useNavigate();
-  const location = useLocation();
-  const first = isFirstEntry(location);
+  const first = useIsFirstEntry();
   return useCallback(
-    (to: string) => {
-      void navigate(to, { replace: true, state: first ? { firstEntry: true } : undefined });
+    (to: string, options?: ReplaceOptions) => {
+      const markFirst = first || options?.asFirst === true;
+      void navigate(to, { replace: true, state: markFirst ? FIRST_ENTRY : undefined });
     },
     [navigate, first],
   );
@@ -37,11 +55,10 @@ export function useReplace(): (to: string) => void {
  */
 export function useBack(fallbackPath = '/'): () => void {
   const navigate = useNavigate();
-  const location = useLocation();
-  const first = isFirstEntry(location);
+  const first = useIsFirstEntry();
   const back = useCallback(() => {
     if (first) {
-      void navigate(fallbackPath, { replace: true, state: { firstEntry: true } });
+      void navigate(fallbackPath, { replace: true, state: FIRST_ENTRY });
     } else {
       void navigate(-1);
     }
