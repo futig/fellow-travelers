@@ -5,6 +5,7 @@ import { StartParamContext } from './lib/startParamContext';
 import { parseStartParam, startParamToPath } from './lib/startParam';
 import { getStartParamRaw } from './lib/telegram';
 import { AdminHub } from './screens/AdminHub/AdminHub';
+import { AdminInvite } from './screens/AdminInvite/AdminInvite';
 import { CreateEvent } from './screens/CreateEvent/CreateEvent';
 import { RouteError } from './screens/ErrorScreen/RouteError';
 import { GroupPlaceholder } from './screens/GroupPlaceholder/GroupPlaceholder';
@@ -33,6 +34,7 @@ export const routes: RouteObject[] = [
       { path: '/events/:id', element: <GroupPlaceholder /> },
       { path: '/events/:id/admin', element: <AdminHub /> },
       { path: '/events/:id/admin/settings', element: <EventSettings /> },
+      { path: '/events/:id/admin/invite', element: <AdminInvite /> },
       // Неизвестный путь (в т.ч. deep link на ещё не готовый экран) — на «Мои группы».
       { path: '*', element: <Navigate to="/" replace /> },
     ],
