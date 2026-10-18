@@ -57,6 +57,25 @@ describe('FlightInfo', () => {
     expect(screen.getByText(/12:25/).closest('s')).not.toBeNull();
   });
 
+  it('landed и cancelled важнее задержки и раннего прилёта', () => {
+    const late = {
+      estimated_arrival: '2026-08-22T13:10:00+03:00',
+      effective_arrival: '2026-08-22T13:10:00+03:00',
+    };
+    const { unmount } = render(<FlightInfo trip={makeTrip({ ...late, status: 'landed' })} />);
+    expect(screen.getByText('● Прилетел')).toHaveClass('success');
+    expect(screen.queryByText(/Задержан/)).not.toBeInTheDocument();
+    unmount();
+
+    const early = {
+      estimated_arrival: '2026-08-22T12:05:00+03:00',
+      effective_arrival: '2026-08-22T12:05:00+03:00',
+    };
+    render(<FlightInfo trip={makeTrip({ ...early, status: 'cancelled' })} />);
+    expect(screen.getByText('● Отменён')).toHaveClass('error');
+    expect(screen.queryByText(/раньше/)).not.toBeInTheDocument();
+  });
+
   it('прилёт на следующие сутки — «+1», кнопка правки', async () => {
     const onEdit = vi.fn();
     const trip = makeTrip({

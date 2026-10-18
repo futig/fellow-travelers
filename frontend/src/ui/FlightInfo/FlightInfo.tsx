@@ -30,7 +30,9 @@ export function isTripDelayed(trip: Trip): boolean {
 }
 
 function tripStatus(trip: Trip): { text: string; tone: Tone } | null {
+  // Итоговые статусы важнее сравнения расчётного и планового времени.
   if (trip.status === 'cancelled') return { text: 'Отменён', tone: 'error' };
+  if (trip.status === 'landed') return { text: 'Прилетел', tone: 'success' };
   if (isTripDelayed(trip)) return { text: 'Задержан', tone: 'error' };
   if (arrivalDiffMs(trip) < 0) return { text: 'Прилетит раньше', tone: 'success' };
   switch (trip.status) {
@@ -38,8 +40,6 @@ function tripStatus(trip: Trip): { text: string; tone: Tone } | null {
       return { text: 'По расписанию', tone: 'success' };
     case 'departed':
       return { text: 'Вылетел', tone: 'accent' };
-    case 'landed':
-      return { text: 'Прилетел', tone: 'success' };
     default:
       return null;
   }
