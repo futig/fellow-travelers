@@ -36,10 +36,38 @@ function isTelegramWebLink(url: string): boolean {
   }
 }
 
-/** Ссылка на чат в Telegram: только `https://t.me/<что-то>`. */
+// Схема `ChatUrl` контракта: целиком строка, без query и фрагмента.
+const CHAT_URL_RE =
+  /^https:\/\/t\.me\/(?:\+[A-Za-z0-9_-]+|joinchat\/[A-Za-z0-9_-]+|([A-Za-z][A-Za-z0-9_]{4,31}))$/;
+const CHAT_URL_MAX_LENGTH = 200;
+
+/** Служебные пути t.me, которые подходят под шаблон username, но не являются чатами. */
+const RESERVED_TME_PATHS = new Set([
+  'proxy',
+  'socks',
+  'share',
+  'addstickers',
+  'addemoji',
+  'addtheme',
+  'addlist',
+  'setlanguage',
+  'login',
+  'confirmphone',
+  'invoice',
+  'boost',
+  'iv',
+]);
+
+/**
+ * Ссылка на чат или канал Telegram (схема `ChatUrl`): `https://t.me/<username>`, `https://t.me/+<hash>`
+ * или `https://t.me/joinchat/<hash>`. Служебные ссылки (прокси, share, `?start=` и т.п.) не проходят.
+ */
 export function isTelegramChatUrl(url: string): boolean {
-  if (!isTelegramWebLink(url)) return false;
-  return new URL(url).pathname.length > 1;
+  if (url.length > CHAT_URL_MAX_LENGTH) return false;
+  const m = CHAT_URL_RE.exec(url);
+  if (!m) return false;
+  const username = m[1];
+  return username === undefined || !RESERVED_TME_PATHS.has(username.toLowerCase());
 }
 
 /**

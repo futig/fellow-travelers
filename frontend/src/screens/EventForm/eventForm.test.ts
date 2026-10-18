@@ -57,6 +57,25 @@ describe('validateEventForm', () => {
     );
     expect(validateEventForm({ ...filled, chat_url: 'https://t.me/+abc' })).toEqual({});
   });
+
+  it.each([
+    'https://t.me/proxy?server=1.2.3.4&port=443&secret=abc',
+    'https://t.me/share/url?url=https://evil.com',
+    'https://t.me/some_bot?start=abc',
+    'https://t.me/chat_room#frag',
+    'https://t.me/abcd',
+    'https://t.me.evil.com/chat_room',
+    'http://t.me/chat_room',
+  ])('служебная или чужая ссылка не проходит: %s', (chat_url) => {
+    expect(validateEventForm({ ...filled, chat_url }).chat_url).toBe(CHAT_URL_ERROR);
+  });
+
+  it.each(['https://t.me/joinchat/abc', 'https://t.me/geleng_chat', ' https://t.me/+abc '])(
+    'ссылка на чат проходит: %s',
+    (chat_url) => {
+      expect(validateEventForm({ ...filled, chat_url })).toEqual({});
+    },
+  );
 });
 
 describe('formToCreate', () => {
