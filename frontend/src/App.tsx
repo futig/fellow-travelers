@@ -8,6 +8,7 @@ import { AdminHub } from './screens/AdminHub/AdminHub';
 import { CreateEvent } from './screens/CreateEvent/CreateEvent';
 import { RouteError } from './screens/ErrorScreen/RouteError';
 import { GroupPlaceholder } from './screens/GroupPlaceholder/GroupPlaceholder';
+import { EventSettings } from './screens/EventSettings/EventSettings';
 import { Home } from './screens/Home/Home';
 import { Invite } from './screens/Invite/Invite';
 import { Join } from './screens/Join/Join';
@@ -31,6 +32,7 @@ export const routes: RouteObject[] = [
       // Заглушка до «Моей поездки» (инкремент 5).
       { path: '/events/:id', element: <GroupPlaceholder /> },
       { path: '/events/:id/admin', element: <AdminHub /> },
+      { path: '/events/:id/admin/settings', element: <EventSettings /> },
       // Неизвестный путь (в т.ч. deep link на ещё не готовый экран) — на «Мои группы».
       { path: '*', element: <Navigate to="/" replace /> },
     ],

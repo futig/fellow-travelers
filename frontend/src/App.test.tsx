@@ -46,7 +46,7 @@ describe('маршрутизация', () => {
   });
 
   it('неизвестный путь — редирект на «Мои группы»', async () => {
-    renderAt(`/events/${EVENT_ID}/admin/settings`);
+    renderAt(`/events/${EVENT_ID}/admin/unknown`);
     expect(await screen.findByText('Вы пока не в группах')).toBeInTheDocument();
   });
 });
