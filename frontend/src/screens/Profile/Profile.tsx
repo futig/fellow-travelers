@@ -86,7 +86,7 @@ export function Profile() {
         )}
       </div>
       <div className={styles.footer}>
-        <Button disabled={!me.has_phone} arrow="→" onClick={() => void navigate('/home')}>
+        <Button disabled={!me.has_phone} arrow="→" onClick={() => void navigate('/')}>
           Далее
         </Button>
       </div>

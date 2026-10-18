@@ -1,20 +1,25 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { createMemoryRouter, RouterProvider } from 'react-router';
+import { QueryClientProvider } from '@tanstack/react-query';
+import { createMemoryRouter, Navigate, RouterProvider } from 'react-router';
+import { createQueryClient } from './api/queryClient';
 import { StartParamContext } from './lib/startParamContext';
-import { parseStartParam } from './lib/startParam';
+import { parseStartParam, startParamToPath } from './lib/startParam';
 import { getStartParamRaw } from './lib/telegram';
 import { Home } from './screens/Home/Home';
 import { Profile } from './screens/Profile/Profile';
 
-const queryClient = new QueryClient();
-
-// Memory router: URL внутри Telegram-webview не важен.
-const router = createMemoryRouter([
-  { path: '/', element: <Profile /> },
-  { path: '/home', element: <Home /> },
-]);
+const queryClient = createQueryClient();
 
 const startParam = parseStartParam(getStartParamRaw());
+
+export const routes = [
+  { path: '/', element: <Home /> },
+  { path: '/profile', element: <Profile /> },
+  // Неизвестный путь (в т.ч. deep link на ещё не готовый экран) — на «Мои группы».
+  { path: '*', element: <Navigate to="/" replace /> },
+];
+
+// Memory router: URL внутри Telegram-webview не важен. Первый экран — по start_param.
+const router = createMemoryRouter(routes, { initialEntries: [startParamToPath(startParam)] });
 
 export function App() {
   return (
