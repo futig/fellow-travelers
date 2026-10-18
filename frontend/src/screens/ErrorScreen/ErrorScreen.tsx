@@ -11,8 +11,8 @@ interface Props {
   action?: { label: string; onClick: () => void };
 }
 
-/** Страница ошибки: карточка 👀 с заголовком и текстом, «Повторить попытку →». */
-export function ErrorScreen({
+/** Карточка ошибки без экрана — для блока внутри экрана (вкладка): 👀, текст и действие. */
+export function ErrorCard({
   title = 'Не удалось загрузить страницу',
   text,
   onRetry,
@@ -20,7 +20,7 @@ export function ErrorScreen({
 }: Props) {
   const button = action ?? (onRetry && { label: 'Повторить попытку', onClick: onRetry });
   return (
-    <Screen center>
+    <>
       <div className={styles.box} role="alert">
         <EmptyState title={title} text={text} />
       </div>
@@ -31,6 +31,15 @@ export function ErrorScreen({
           </Button>
         </div>
       )}
+    </>
+  );
+}
+
+/** Страница ошибки: карточка 👀 с заголовком и текстом, «Повторить попытку →». */
+export function ErrorScreen(props: Props) {
+  return (
+    <Screen center>
+      <ErrorCard {...props} />
     </Screen>
   );
 }
