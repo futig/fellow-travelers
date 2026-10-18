@@ -60,13 +60,7 @@ export function Profile() {
 
   if (error) {
     if (isUnauthorized(error)) return <OpenInTelegramScreen />;
-    return (
-      <ErrorScreen
-        title="Что-то пошло не так"
-        text={error.message}
-        onRetry={() => void refetch()}
-      />
-    );
+    return <ErrorScreen text={error.message} onRetry={() => void refetch()} />;
   }
 
   return (
