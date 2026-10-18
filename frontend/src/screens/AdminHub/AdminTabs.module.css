@@ -1,0 +1,247 @@
+.tab {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.list[aria-busy='true'] {
+  opacity: 0.6;
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  border-radius: var(--radius-l);
+  background: var(--shape-base);
+}
+
+.expected {
+  font-family: var(--font-heading);
+  font-weight: 700;
+  font-size: 20px;
+  line-height: 28px;
+  color: var(--text-heavy);
+}
+
+.counters {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(88px, 1fr));
+  gap: 12px;
+  margin: 0;
+}
+
+/* Число над подписью; в разметке dt идёт первым. */
+.counter {
+  display: flex;
+  flex-direction: column-reverse;
+  gap: 2px;
+}
+
+.counterLabel {
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--text-soft);
+}
+
+.counterValue {
+  margin: 0;
+  font-weight: 700;
+  font-size: 16px;
+  line-height: 22px;
+  color: var(--text-heavy);
+}
+
+.muted,
+.meta {
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--text-soft);
+}
+
+.meta {
+  font-weight: 700;
+}
+
+.filters {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.chip {
+  min-height: 36px;
+  padding: 8px 12px;
+  border: 1px solid var(--line-accent);
+  border-radius: var(--radius-m);
+  background: var(--shape-base);
+  font-weight: 700;
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--text-accent);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.chipActive {
+  border-color: var(--shape-dark);
+  background: var(--shape-dark);
+  color: var(--text-inverted-heavy);
+}
+
+.select {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.selectLabel {
+  font-size: 16px;
+  line-height: 22px;
+  color: var(--text-heavy);
+}
+
+.selectInput {
+  width: 100%;
+  height: 50px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: var(--radius-m);
+  background: var(--shape-base);
+  font: inherit;
+  font-size: 16px;
+  color: var(--text-heavy);
+}
+
+.participant {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  border-radius: var(--radius-l);
+  background: var(--shape-base);
+}
+
+.participantHead {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.participantText {
+  flex: 1;
+  min-width: 0;
+}
+
+.participantBody {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+
+.name {
+  font-weight: 700;
+  font-size: 16px;
+  line-height: 22px;
+  color: var(--text-heavy);
+  overflow-wrap: anywhere;
+}
+
+.plus,
+.pale {
+  color: var(--text-pale);
+}
+
+.caption {
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--text-soft);
+  overflow-wrap: anywhere;
+}
+
+.line {
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--text-heavy);
+}
+
+.statusLine {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-weight: 700;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--text-accent);
+}
+
+.mark {
+  color: var(--text-soft);
+}
+
+.success {
+  color: var(--text-success);
+}
+
+.accent {
+  color: var(--text-accent);
+}
+
+.soft {
+  color: var(--text-soft);
+}
+
+/* Строка статуса под именами в карточке трансфера. */
+.state {
+  display: block;
+  margin-top: 4px;
+  font-weight: 700;
+}
+
+.linkButton {
+  margin-top: 4px;
+  padding: 6px 12px;
+  border: 0;
+  border-radius: var(--radius-m);
+  background: var(--surface-low);
+  font-weight: 700;
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--text-accent);
+  cursor: pointer;
+}
+
+.error {
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--text-error);
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}

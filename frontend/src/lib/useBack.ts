@@ -48,6 +48,19 @@ export function useReplace(): (to: string, options?: ReplaceOptions) => void {
   );
 }
 
+/** Замена query-параметров текущего экрана (вкладка, фильтры) без новой записи истории. */
+export function useReplaceSearch(): (params: URLSearchParams) => void {
+  const replace = useReplace();
+  const { pathname } = useLocation();
+  return useCallback(
+    (params: URLSearchParams) => {
+      const search = params.toString();
+      replace(search ? `${pathname}?${search}` : pathname);
+    },
+    [replace, pathname],
+  );
+}
+
 /**
  * Обработчик «уйти с экрана назад» без BackButton: на предыдущую запись истории, а если экран
  * открыт первым (deep link) — на `fallbackPath` с заменой. Для экранов со своей логикой «Назад»

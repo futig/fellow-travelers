@@ -4,6 +4,7 @@ import {
   formatCountdown,
   formatDateRange,
   formatDayMonth,
+  formatOffsetTime,
   formatTime,
   isoDateInZone,
   isoToLocalInput,
@@ -210,5 +211,13 @@ describe('переход на летнее/зимнее время', () => {
         'Europe/Berlin',
       ),
     ).toBe(0);
+  });
+});
+
+describe('formatOffsetTime', () => {
+  it('время строки в её смещении, не в поясе устройства', () => {
+    expect(formatOffsetTime('2026-08-22T12:40:00+05:00')).toBe('12:40');
+    expect(formatOffsetTime('2026-08-22T23:05:00Z')).toBe('23:05');
+    expect(formatOffsetTime('мусор')).toBe('');
   });
 });

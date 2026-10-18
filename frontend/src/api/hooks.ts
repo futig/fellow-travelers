@@ -93,18 +93,25 @@ export function useMyTrip(eventId: string) {
   return useQuery({ queryKey: queryKeys.myTrip(eventId), queryFn: () => fetchMyTrip(eventId) });
 }
 
-export function useAdminParticipants(eventId: string, filters: ParticipantsFilters = {}) {
+/** Участники группы (админ); пока меняют фильтры — показываем прошлый результат. */
+export function useAdminParticipants(
+  eventId: string,
+  filters: ParticipantsFilters = {},
+  { enabled = true }: { enabled?: boolean } = {},
+) {
   return useQuery({
     queryKey: queryKeys.adminParticipants(eventId, filters),
     queryFn: () => fetchAdminParticipants(eventId, filters),
     placeholderData: keepPreviousData,
+    enabled,
   });
 }
 
-export function useAdminTransfers(eventId: string) {
+export function useAdminTransfers(eventId: string, { enabled = true }: { enabled?: boolean } = {}) {
   return useQuery({
     queryKey: queryKeys.adminTransfers(eventId),
     queryFn: () => fetchAdminTransfers(eventId),
+    enabled,
   });
 }
 

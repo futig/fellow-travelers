@@ -18,6 +18,20 @@
   color: var(--text-accent);
 }
 
+.eyebrowButton {
+  align-self: flex-start;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-weight: 700;
+  font-size: 12px;
+  line-height: 16px;
+  text-transform: uppercase;
+  color: var(--text-accent);
+  cursor: pointer;
+}
+
 .title {
   font-family: var(--font-heading);
   font-weight: 700;

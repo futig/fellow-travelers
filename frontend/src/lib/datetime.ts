@@ -71,6 +71,17 @@ export function formatTime(iso: string, timeZone: string): string {
   return `${p.hour}:${p.minute}`;
 }
 
+const OFFSET_TIME_RE = /T(\d{2}):(\d{2})/;
+
+/**
+ * `HH:MM` из ISO-строки как есть — в её собственном смещении (пояс точки, от которой пришло время).
+ * Для времени без известного IANA-пояса, например прилёт попутчика.
+ */
+export function formatOffsetTime(iso: string): string {
+  const m = OFFSET_TIME_RE.exec(iso);
+  return m ? `${m[1]}:${m[2]}` : '';
+}
+
 /** «22 августа» — дата момента в поясе `timeZone`. */
 export function formatDayMonth(iso: string, timeZone: string): string {
   const p = partsInZone(iso, timeZone);

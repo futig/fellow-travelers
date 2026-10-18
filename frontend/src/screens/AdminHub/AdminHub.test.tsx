@@ -12,6 +12,8 @@ const api = vi.hoisted(() => ({
   fetchEventTrips: vi.fn(),
   fetchEventInvite: vi.fn(),
   joinByInvite: vi.fn(),
+  fetchAdminParticipants: vi.fn(),
+  fetchAdminTransfers: vi.fn(),
 }));
 
 vi.mock('../../api/events', async (importOriginal) => ({
@@ -22,11 +24,25 @@ vi.mock('../../api/trips', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../api/trips')>()),
   fetchEventTrips: api.fetchEventTrips,
 }));
+vi.mock('../../api/admin', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../api/admin')>()),
+  fetchAdminParticipants: api.fetchAdminParticipants,
+  fetchAdminTransfers: api.fetchAdminTransfers,
+}));
 vi.mock('../../api/invites', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../api/invites')>()),
   fetchEventInvite: api.fetchEventInvite,
   joinByInvite: api.joinByInvite,
 }));
+
+const COUNTERS = {
+  expected: 0,
+  searching: 0,
+  assigned: 0,
+  solo: 0,
+  at_meeting_point: 0,
+  departed: 0,
+};
 
 const INVITE = { code: 'K7Q2ZP', link: 'https://t.me/bot?startapp=join_K7Q2ZP' };
 
@@ -39,6 +55,8 @@ describe('AdminHub', () => {
     Object.values(api).forEach((fn) => fn.mockReset());
     api.fetchEventTrips.mockResolvedValue([makeTrip(), makeTrip({ id: 'x' })]);
     api.fetchEventInvite.mockResolvedValue(INVITE);
+    api.fetchAdminParticipants.mockResolvedValue({ counters: COUNTERS, participants: [] });
+    api.fetchAdminTransfers.mockResolvedValue([]);
   });
 
   it('админ-участник: шапка, меню с числом рейсов и «Моя поездка», без вступления', async () => {
