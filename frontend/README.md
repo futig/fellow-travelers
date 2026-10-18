@@ -7,7 +7,7 @@
 
 Vite, React 19, TypeScript (strict), npm. `@telegram-apps/sdk-react` (SDK Telegram), `openapi-fetch` +
 `openapi-typescript` (типы из контракта), TanStack Query, React Router (memory router), CSS Modules.
-Шрифты локальные: Arimo (`@fontsource/arimo`) и Martian Grotesk (OFL, `src/assets/fonts/`).
+Шрифты локальные: Arimo (`@fontsource/arimo`), Martian Mono (`@fontsource/martian-mono`) и Martian Grotesk (OFL, `src/assets/fonts/`).
 
 ## Команды
 
