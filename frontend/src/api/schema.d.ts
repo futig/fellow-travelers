@@ -234,7 +234,9 @@ export interface paths {
          * Создать или изменить заявку (CAP-04). Одна заявка на пользователя в группе
          * @description Первый вызов создаёт заявку в статусе `searching` и запускает подбор; повторный — обновляет её
          *     (вторая заявка не создаётся). Заявка в статусе `cancelled` при PUT возвращается в `searching`.
-         *     pre-MVP: при статусе `assigned` → 409 APPLICATION_LOCKED.
+         *     Поле `seek_companions` задаёт статус явно: `false` → `solo` без подбора (так можно сразу
+         *     создать заявку «еду самостоятельно»), `true` → `searching` с подбором.
+         *     pre-MVP: при статусе `assigned` → 409 APPLICATION_LOCKED (независимо от `seek_companions`).
          *     MVP: изменение назначенной заявки — проверка совместимости, при несовместимости заявка выходит
          *     из трансфера и снова ищет попутчиков.
          *     После «Уехал» → 409 ALREADY_DEPARTED.
@@ -726,6 +728,12 @@ export interface components {
             /** @description Места регистрируемого багажа суммарно на автора и спутника */
             baggage_count: number;
             max_wait_minutes: components["schemas"]["WaitMinutes"];
+            /**
+             * @description Искать ли попутчиков. Не передано — статус меняется как раньше (см. описание PUT).
+             *     `false` — заявка сохраняется в статусе `solo`, подбор не запускается (в том числе при первом PUT).
+             *     `true` — заявка переходит в `searching` (из `solo` и `cancelled` тоже) и запускается подбор.
+             */
+            seek_companions?: boolean;
         };
         Application: {
             /** Format: uuid */

@@ -18,6 +18,15 @@ class ApplicationInput(BaseModel):
     with_companion: bool
     baggage_count: Annotated[int, Field(ge=0, le=2)]
     max_wait_minutes: WaitMinutes
+    seek_companions: bool | None = None
+
+    @field_validator("seek_companions", mode="before")
+    @classmethod
+    def _not_null(cls, value: Any) -> Any:
+        # необязательное поле: можно не передавать, но null контракт не допускает
+        if value is None:
+            raise ValueError("Поле не может быть null")
+        return value
 
 
 class MarksInput(BaseModel):
