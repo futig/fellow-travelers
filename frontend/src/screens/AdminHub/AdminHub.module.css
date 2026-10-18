@@ -45,3 +45,10 @@
   line-height: 20px;
   color: var(--text-error);
 }
+
+.tabs {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-top: 12px;
+}
