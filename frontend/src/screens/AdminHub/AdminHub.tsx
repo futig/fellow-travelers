@@ -14,6 +14,7 @@ import { OpenInTelegramScreen } from '../ErrorScreen/ErrorScreen';
 import { readFilters, readTab, setTab, setTrip, toggleStatus, type AdminTab } from './admin';
 import styles from './AdminHub.module.css';
 import { ParticipantsTab } from './ParticipantsTab';
+import { TransfersTab } from './TransfersTab';
 
 const TRIPS_HINT = 'Участники выбирают рейс из этого списка';
 
@@ -65,6 +66,7 @@ export function AdminHub() {
       ? TRIPS_HINT
       : `${tripsCount} ${plural(tripsCount, ['рейс', 'рейса', 'рейсов'])} · ${TRIPS_HINT}`;
   const go = (path: string) => () => void navigate(`/events/${eventId}${path}`);
+  const openTransfer = (transferId: string) => go(`/admin/transfers/${transferId}`)();
 
   function joinAsParticipant() {
     join.join(() => void navigate(`/events/${eventId}`));
@@ -155,9 +157,12 @@ export function AdminHub() {
                 trips={trips.data}
                 onToggleStatus={(status) => replaceSearch(toggleStatus(searchParams, status))}
                 onTripChange={(tripId) => replaceSearch(setTrip(searchParams, tripId))}
-                onOpenTransfer={(transferId) => go(`/admin/transfers/${transferId}`)()}
+                onOpenTransfer={openTransfer}
                 onInvite={go('/admin/invite')}
               />
+            )}
+            {tab === 'transfers' && (
+              <TransfersTab eventId={eventId} onOpenTransfer={openTransfer} />
             )}
           </div>
         </div>
