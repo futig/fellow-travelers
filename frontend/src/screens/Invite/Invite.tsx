@@ -34,9 +34,9 @@ export function Invite() {
   const join = useJoin();
   const alreadyMember = preview?.already_member === true;
 
-  // Уже в группе — сразу в неё, без промежуточного экрана.
+  // Уже в группе — сразу в неё, без промежуточного экрана; «Назад» из группы — на «Мои группы».
   useEffect(() => {
-    if (alreadyMember && preview) replace(`/events/${preview.event_id}`);
+    if (alreadyMember && preview) replace(`/events/${preview.event_id}`, { asFirst: true });
   }, [alreadyMember, preview, replace]);
 
   /** Вступил: группа становится «первым» экраном — её «Назад» ведёт на «Мои группы», а не на ввод кода. */

@@ -121,6 +121,20 @@ describe('Invite', () => {
     expect(screen.queryByRole('button', { name: /Вступить/ })).not.toBeInTheDocument();
   });
 
+  it('Home → Join → Invite (already_member) → группа → Назад → Home', async () => {
+    fetchInvitePreview.mockResolvedValue({ ...preview, already_member: true });
+    renderRoute(
+      '/invite/:code',
+      <Invite />,
+      '/invite/K7Q2ZP',
+      ['/', '/join'],
+      [{ path: '/events/:id', element: <GroupStub /> }],
+    );
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Назад из группы' }));
+    expect(screen.getByTestId('location')).toHaveTextContent(/^\/$/);
+  });
+
   it('join_open=false → «Вступление закрыто» и «Мои группы»', async () => {
     fetchInvitePreview.mockResolvedValue({ ...preview, join_open: false });
     renderInvite();
