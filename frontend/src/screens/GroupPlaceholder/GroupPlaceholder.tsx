@@ -1,7 +1,8 @@
-import { useParams } from 'react-router';
-import { useEvent } from '../../api/hooks';
+import { useNavigate, useParams } from 'react-router';
+import { useEvent, useMyApplication } from '../../api/hooks';
 import { formatDateRange } from '../../lib/datetime';
 import { useBack } from '../../lib/useBack';
+import { Button } from '../../ui/Button/Button';
 import { Screen } from '../../ui/Screen/Screen';
 import { ScreenHeader } from '../../ui/ScreenHeader/ScreenHeader';
 import { Skeleton } from '../../ui/Skeleton/Skeleton';
@@ -12,7 +13,10 @@ import styles from './GroupPlaceholder.module.css';
 export function GroupPlaceholder() {
   const eventId = useParams().id ?? '';
   useBack('/');
+  const navigate = useNavigate();
   const { data: event, error, isPending, refetch } = useEvent(eventId);
+  // 404 — заявки нет; пока не ясно, есть ли она, кнопку не показываем.
+  const application = useMyApplication(eventId);
 
   if (isPending) {
     return (
@@ -36,6 +40,19 @@ export function GroupPlaceholder() {
         subtitle={formatDateRange(event.starts_on, event.ends_on)}
       />
       <p className={styles.card}>Экран группы появится в следующей версии</p>
+      {event.is_participant && !application.isPending && (
+        <div className={styles.footer}>
+          {application.data ? (
+            <Button arrow="→" onClick={() => void navigate(`/events/${eventId}/apply?step=review`)}>
+              Изменить заявку
+            </Button>
+          ) : (
+            <Button arrow="→" onClick={() => void navigate(`/events/${eventId}/apply`)}>
+              Заполнить заявку
+            </Button>
+          )}
+        </div>
+      )}
     </Screen>
   );
 }
