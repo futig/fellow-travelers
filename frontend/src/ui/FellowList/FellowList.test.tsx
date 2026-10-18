@@ -64,6 +64,15 @@ describe('FellowList', () => {
     expect(screen.queryByRole('link')).not.toBeInTheDocument();
   });
 
+  it('photo_url не по https — заглушка вместо <img>', () => {
+    const { container } = render(
+      <FellowList
+        items={[{ id: '1', contact: makeContact({ photo_url: 'javascript:alert(1)' }) }]}
+      />,
+    );
+    expect(container.querySelector('img')).toBeNull();
+  });
+
   it('showContacts=false — без контактов (для себя)', () => {
     render(
       <FellowList

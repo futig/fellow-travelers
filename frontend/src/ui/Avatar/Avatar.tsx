@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { isSafeExternalUrl } from '../../lib/links';
 import styles from './Avatar.module.css';
 
 interface Props {
@@ -12,7 +13,8 @@ interface Props {
 
 export function Avatar({ src, loading = false, size = 128, decorative = false }: Props) {
   const [failedSrc, setFailedSrc] = useState<string | null>(null);
-  const showImage = !!src && src !== failedSrc;
+  // Фото — только по https (photo_url приходит извне); иначе заглушка.
+  const showImage = isSafeExternalUrl(src) && src !== failedSrc;
 
   return (
     <div
@@ -21,7 +23,13 @@ export function Avatar({ src, loading = false, size = 128, decorative = false }:
       aria-hidden={decorative || undefined}
     >
       {showImage ? (
-        <img className={styles.image} src={src} alt="" onError={() => setFailedSrc(src)} />
+        <img
+          className={styles.image}
+          src={src}
+          alt=""
+          referrerPolicy="no-referrer"
+          onError={() => setFailedSrc(src)}
+        />
       ) : (
         !loading && (
           <span
