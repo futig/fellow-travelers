@@ -68,6 +68,8 @@ Telegram открывает мини-приложения только по HTTP
 Docker-образ собирается в два этапа (`node:24-alpine` -> `nginx:1.27-alpine`), статика отдаётся nginx
 (`nginx.conf`): `/api/` проксируется на сервис `api:8000`, `/assets/` кешируется навсегда, остальное —
 fallback на `index.html`.
+Защитные заголовки (CSP, `nosniff`, `Referrer-Policy`) — в `security-headers.conf`; он подключается
+в `server` и в каждом `location` со своим `add_header`. Inline-скриптов в сборке нет (`script-src 'self'`).
 
 ```bash
 cd ../backend
