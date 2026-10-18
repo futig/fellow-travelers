@@ -108,7 +108,11 @@ async def upsert_my_application(
             with_companion=data.with_companion,
             baggage_count=data.baggage_count,
             max_wait_minutes=data.max_wait_minutes,
-            status=ApplicationStatus.SEARCHING,
+            status=(
+                ApplicationStatus.SOLO
+                if data.seek_companions is False
+                else ApplicationStatus.SEARCHING
+            ),
         )
         session.add(application)
     else:
@@ -124,7 +128,11 @@ async def upsert_my_application(
         application.with_companion = data.with_companion
         application.baggage_count = data.baggage_count
         application.max_wait_minutes = data.max_wait_minutes
-        if application.status == ApplicationStatus.CANCELLED:
+        if data.seek_companions is True:
+            application.status = ApplicationStatus.SEARCHING
+        elif data.seek_companions is False:
+            application.status = ApplicationStatus.SOLO
+        elif application.status == ApplicationStatus.CANCELLED:
             application.status = ApplicationStatus.SEARCHING
     try:
         async with session.begin_nested():
@@ -134,7 +142,8 @@ async def upsert_my_application(
         if getattr(exc.orig, "sqlstate", None) == _FOREIGN_KEY_VIOLATION:
             raise _trip_error() from exc
         raise
-    await match_application(session, application)
+    if application.status == ApplicationStatus.SEARCHING:
+        await match_application(session, application)
     return await _finish(session, event, user), created
 
 

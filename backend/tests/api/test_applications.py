@@ -1029,3 +1029,107 @@ async def _me(session: AsyncSession) -> User:
     return (
         await session.execute(select(User).where(User.telegram_id == USER_TELEGRAM_ID))
     ).scalar_one()
+
+
+# ---------------------------------------------------------------- seek_companions
+
+
+async def test_put_seek_false_creates_solo_without_matching(
+    api_client: AsyncClient, db_session: AsyncSession, event: Event, p2: User
+) -> None:
+    await apply(api_client, db_session, event, 101)
+
+    response = await apply(api_client, db_session, event, 42, seek_companions=False)
+
+    assert response.status_code == 201
+    assert response.json()["status"] == "solo"
+    assert response.json()["transfer_id"] is None
+    assert (await get_app(api_client, event, 101)).json()["status"] == "searching"
+    assert await transfer_count(db_session, event) == 0
+
+
+async def test_put_seek_false_from_searching_makes_solo(
+    api_client: AsyncClient, db_session: AsyncSession, event: Event
+) -> None:
+    await apply(api_client, db_session, event, 42)
+    trip_id = await trip_at(db_session, event, 0)
+
+    response = await put_app(api_client, db_session, event, body(trip_id, seek_companions=False))
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "solo"
+
+
+async def test_put_seek_true_from_solo_searches_and_matches(
+    api_client: AsyncClient, db_session: AsyncSession, event: Event, p2: User
+) -> None:
+    await apply(api_client, db_session, event, 101)
+    await apply(api_client, db_session, event, 42, seek_companions=False)
+    trip_id = await trip_at(db_session, event, 0)
+
+    response = await put_app(api_client, db_session, event, body(trip_id, seek_companions=True))
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "assigned"
+    assert response.json()["transfer_id"] is not None
+    assert await transfer_count(db_session, event) == 1
+
+
+async def test_put_seek_true_from_cancelled_searches(
+    api_client: AsyncClient, db_session: AsyncSession, event: Event
+) -> None:
+    await apply(api_client, db_session, event, 42)
+    await act(api_client, db_session, event, "cancel")
+    trip_id = await trip_at(db_session, event, 0)
+
+    response = await put_app(api_client, db_session, event, body(trip_id, seek_companions=True))
+
+    assert response.json()["status"] == "searching"
+
+
+async def test_put_seek_false_from_cancelled_makes_solo(
+    api_client: AsyncClient, db_session: AsyncSession, event: Event
+) -> None:
+    await apply(api_client, db_session, event, 42)
+    await act(api_client, db_session, event, "cancel")
+    trip_id = await trip_at(db_session, event, 0)
+
+    response = await put_app(api_client, db_session, event, body(trip_id, seek_companions=False))
+
+    assert response.json()["status"] == "solo"
+
+
+async def test_put_without_seek_keeps_solo(
+    api_client: AsyncClient, db_session: AsyncSession, event: Event
+) -> None:
+    await apply(api_client, db_session, event, 42, seek_companions=False)
+    trip_id = await trip_at(db_session, event, 0)
+
+    response = await put_app(api_client, db_session, event, body(trip_id))
+
+    assert response.json()["status"] == "solo"
+
+
+@pytest.mark.parametrize("seek", [False, True])
+async def test_put_seek_when_assigned_is_locked(
+    api_client: AsyncClient, db_session: AsyncSession, event: Event, p2: User, seek: bool
+) -> None:
+    await apply(api_client, db_session, event, 42)
+    await apply(api_client, db_session, event, 101)
+    trip_id = await trip_at(db_session, event, 1)
+
+    response = await put_app(api_client, db_session, event, body(trip_id, seek_companions=seek))
+
+    assert response.status_code == 409
+    assert error_code(response) == "APPLICATION_LOCKED"
+
+
+async def test_put_seek_null_is_rejected(
+    api_client: AsyncClient, db_session: AsyncSession, event: Event
+) -> None:
+    trip_id = await trip_at(db_session, event)
+
+    response = await put_app(api_client, db_session, event, body(trip_id, seek_companions=None))
+
+    assert response.status_code == 422
+    assert "seek_companions" in response.json()["error"]["details"]["fields"]
