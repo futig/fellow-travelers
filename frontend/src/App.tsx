@@ -15,6 +15,7 @@ import { Invite } from './screens/Invite/Invite';
 import { Join } from './screens/Join/Join';
 import { MyTrip } from './screens/MyTrip/MyTrip';
 import { Profile } from './screens/Profile/Profile';
+import { TransferDetails } from './screens/TransferDetails/TransferDetails';
 import { TripForm } from './screens/TripForm/TripForm';
 import { Trips } from './screens/Trips/Trips';
 
@@ -42,6 +43,7 @@ export const routes: RouteObject[] = [
       { path: '/events/:id/admin/trips', element: <Trips /> },
       { path: '/events/:id/admin/trips/new', element: <TripForm /> },
       { path: '/events/:id/admin/trips/:tripId', element: <TripForm /> },
+      { path: '/events/:id/admin/transfers/:tid', element: <TransferDetails /> },
       // Неизвестный путь (в т.ч. deep link на ещё не готовый экран) — на «Мои группы».
       { path: '*', element: <Navigate to="/" replace /> },
     ],

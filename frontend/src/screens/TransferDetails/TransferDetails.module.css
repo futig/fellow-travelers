@@ -1,0 +1,49 @@
+.content {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-top: 20px;
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-top: 12px;
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 16px;
+  border-radius: var(--radius-l);
+  background: var(--shape-base);
+}
+
+.state {
+  font-weight: 700;
+  font-size: 16px;
+  line-height: 22px;
+}
+
+.muted {
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--text-soft);
+  overflow-wrap: anywhere;
+}
+
+.success,
+.markSuccess {
+  font-weight: 700;
+  color: var(--text-success);
+}
+
+.accent {
+  color: var(--text-accent);
+}
+
+.soft {
+  color: var(--text-soft);
+}
