@@ -1,0 +1,35 @@
+/* Помещается в нижний отступ Screen (40px), не перекрывая кнопки футера. */
+.switcher {
+  position: fixed;
+  bottom: calc(4px + env(safe-area-inset-bottom, 0px));
+  left: 50%;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: calc(100% - 16px);
+  padding: 2px 8px;
+  border-radius: var(--radius-m);
+  background: var(--shape-dark);
+  color: var(--text-inverted-heavy);
+  font-size: 12px;
+  line-height: 16px;
+  opacity: 0.6;
+  transform: translateX(-50%);
+}
+
+.switcher:hover,
+.switcher:focus-within {
+  opacity: 1;
+}
+
+.label {
+  flex-shrink: 0;
+}
+
+.select {
+  min-width: 0;
+  max-width: 260px;
+  font: inherit;
+  text-overflow: ellipsis;
+}

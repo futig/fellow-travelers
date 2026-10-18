@@ -35,13 +35,14 @@ npm run check:api    # проверить, что schema.d.ts актуален (
 
 См. `.env.example` (копия в `.env.local`):
 
-| Переменная           | Назначение                                                                       |
-| -------------------- | -------------------------------------------------------------------------------- |
-| `VITE_API_BASE`      | Базовый URL API, по умолчанию `/api/v1`                                          |
-| `VITE_BOT_USERNAME`  | Username бота без `@`: открывается, если `requestContact` недоступен             |
-| `VITE_MOCK_TELEGRAM` | `true` (только dev) — имитировать окружение Telegram с фейковыми user и initData |
-| `VITE_MOCK_API`      | `true` — вместо сети отдавать фиктивный профиль                                  |
-| `VITE_MOCK_NO_PHONE` | `true` — фиктивный профиль без телефона (с `VITE_MOCK_API`)                      |
+| Переменная           | Назначение                                                                                       |
+| -------------------- | ------------------------------------------------------------------------------------------------ |
+| `VITE_API_BASE`      | Базовый URL API, по умолчанию `/api/v1`                                                          |
+| `VITE_BOT_USERNAME`  | Username бота без `@`: открывается, если `requestContact` недоступен                             |
+| `VITE_MOCK_TELEGRAM` | `true` (только dev) — имитировать окружение Telegram (initData из `VITE_DEV_USERS` или фейковая) |
+| `VITE_MOCK_API`      | `true` — вместо сети отдавать фиктивный профиль                                                  |
+| `VITE_MOCK_NO_PHONE` | `true` — фиктивный профиль без телефона (с `VITE_MOCK_API`)                                      |
+| `VITE_DEV_USERS`     | Только dev, с `VITE_MOCK_TELEGRAM`: тестовые пользователи с подписанной initData                 |
 
 Переменные `VITE_*` подставляются при сборке (в Docker-образе — через `--build-arg`, см. «Деплой»).
 
@@ -54,6 +55,38 @@ npm run dev
 ```
 
 Без `VITE_MOCK_TELEGRAM` в обычном браузере показывается экран «Откройте приложение из Telegram».
+
+## Разработка в браузере с настоящим бэкендом
+
+Короткий путь — `make dev-setup` и `make dev` из корня репозитория (см. [README](../README.md#разработка)). Ниже — как это устроено.
+
+Бэкенд принимает только initData, подписанную `BOT_TOKEN`. Её вместе с тестовыми пользователями (с телефонами)
+готовит скрипт бэкенда, подробнее — в `../backend/README.md`.
+
+1. Бэкенд (из `../backend`, в `backend/.env`: `DEBUG=true` и любой `BOT_TOKEN`):
+
+   ```bash
+   docker compose up -d db
+   alembic upgrade head
+   python -m app.seeds.locations   # справочник аэропортов
+   python -m app.dev.users         # тестовые пользователи -> ../frontend/.env.development.local
+   uvicorn app.main:app --reload
+   ```
+
+   Скрипт пишет в `frontend/.env.development.local` (не коммитится, `*.local` в `.gitignore`)
+   `VITE_MOCK_TELEGRAM=true` и `VITE_DEV_USERS` — base64url без паддинга от JSON
+   `[{"label": "...", "init_data": "..."}]`.
+
+2. Фронтенд: `npm run dev`, открыть http://localhost:5173. Внизу экрана — плашка «Dev: пользователь»:
+   смена пользователя перезагружает страницу. Выбор хранится в `sessionStorage`, поэтому во второй вкладке
+   можно сидеть под другим пользователем (например, админ группы и участник).
+
+3. initData действует `INIT_DATA_MAX_AGE_SECONDS` (настройка бэкенда, по умолчанию сутки). Когда истечёт
+   (API отвечает 401), перезапустите `python -m app.dev.users` и dev-сервер Vite: env-файлы читаются при старте.
+
+Плашка и код тестовых пользователей подключаются только в dev (`import.meta.env.DEV`) и в prod-сборку не попадают.
+Без `VITE_DEV_USERS` мок Telegram подставляет фейковую initData — её бэкенд отклонит, подходит только для
+`VITE_MOCK_API`.
 
 ## Запуск внутри Telegram
 
