@@ -6,6 +6,8 @@ interface ImportMetaEnv {
   readonly VITE_MOCK_TELEGRAM?: string;
   readonly VITE_MOCK_API?: string;
   readonly VITE_MOCK_NO_PHONE?: string;
+  /** Тестовые пользователи для dev, см. src/lib/devUsers.ts */
+  readonly VITE_DEV_USERS?: string;
 }
 
 interface ImportMeta {

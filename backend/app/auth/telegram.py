@@ -5,7 +5,7 @@ import logging
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Annotated, Any
-from urllib.parse import parse_qsl
+from urllib.parse import parse_qsl, urlencode
 
 from fastapi import Depends
 from fastapi.security import APIKeyHeader
@@ -54,13 +54,25 @@ def _parse_pairs(raw: str) -> dict[str, str]:
     return fields
 
 
+def _compute_hash(fields: dict[str, str], bot_token: str) -> str:
+    data_check_string = "\n".join(f"{k}={v}" for k, v in sorted(fields.items()) if k != "hash")
+    secret_key = hmac.new(b"WebAppData", bot_token.encode(), hashlib.sha256).digest()
+    return hmac.new(secret_key, data_check_string.encode(), hashlib.sha256).hexdigest()
+
+
+def sign_init_data(fields: dict[str, str], bot_token: str) -> str:
+    """Собирает подписанную строку initData; user передавайте уже как JSON-строку.
+
+    Нужна тестам и dev-скрипту (`python -m app.dev.users`); сервер только проверяет подпись.
+    """
+    return urlencode({**fields, "hash": _compute_hash(fields, bot_token)})
+
+
 def _check_hash(fields: dict[str, str], bot_token: str) -> None:
     received = fields.get("hash")
     if received is None:
         raise InitDataError("hash is missing")
-    data_check_string = "\n".join(f"{k}={v}" for k, v in sorted(fields.items()) if k != "hash")
-    secret_key = hmac.new(b"WebAppData", bot_token.encode(), hashlib.sha256).digest()
-    expected = hmac.new(secret_key, data_check_string.encode(), hashlib.sha256).hexdigest()
+    expected = _compute_hash(fields, bot_token)
     if not hmac.compare_digest(expected.encode(), received.encode()):
         raise InitDataError("hash mismatch")
 
