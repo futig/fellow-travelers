@@ -1,0 +1,133 @@
+.content {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-top: 20px;
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-top: 12px;
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  border-radius: var(--radius-l);
+  background: var(--shape-base);
+}
+
+.cardTitle {
+  margin: 0;
+  font-weight: 700;
+  font-size: 16px;
+  line-height: 22px;
+  color: var(--text-heavy);
+}
+
+.text {
+  margin: 0;
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--text-heavy);
+}
+
+/* Инструкция организатора: переносы строк как ввёл админ. */
+.instruction {
+  margin: 0;
+  font-size: 16px;
+  line-height: 22px;
+  color: var(--text-heavy);
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+
+.muted {
+  margin: 0;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--text-soft);
+}
+
+.address {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.addressText {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--text-heavy);
+  overflow-wrap: anywhere;
+}
+
+.copy {
+  flex-shrink: 0;
+  padding: 8px 12px;
+  border: 0;
+  border-radius: var(--radius-m);
+  background: var(--surface-low);
+  font-weight: 700;
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--text-accent);
+  cursor: pointer;
+}
+
+/* Плашка «✅ Вы на месте»: как неактивная primary-кнопка. */
+.plate {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 54px;
+  margin: 0;
+  padding: 16px;
+  border-radius: var(--radius-m);
+  background: var(--shape-accent-disabled);
+  font-weight: 700;
+  font-size: 16px;
+  line-height: 22px;
+  color: var(--text-inverted-heavy);
+}
+
+.success {
+  background: var(--shape-base);
+  color: var(--text-success);
+}
+
+/* Кнопка-ссылка (второстепенное действие). */
+.link {
+  align-self: center;
+  padding: 8px;
+  border: 0;
+  background: none;
+  font-weight: 700;
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--text-accent);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.error {
+  margin: 0;
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--text-error);
+}
+
+.footer {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-top: 24px;
+}
