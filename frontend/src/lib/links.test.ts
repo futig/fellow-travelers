@@ -10,6 +10,7 @@ vi.mock('@telegram-apps/sdk-react', () => sdk);
 import {
   copyToClipboard,
   isSafeExternalUrl,
+  isTelegramChatUrl,
   openExternal,
   shareUrl,
   telegramUserUrl,
@@ -104,5 +105,18 @@ describe('shareUrl / copyToClipboard', () => {
     Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
     expect(await copyToClipboard('K7Q2ZP')).toBe(true);
     expect(writeText).toHaveBeenCalledWith('K7Q2ZP');
+  });
+});
+
+describe('isTelegramChatUrl', () => {
+  it('только https://t.me/<путь>', () => {
+    expect(isTelegramChatUrl('https://t.me/+AbCdEf')).toBe(true);
+    expect(isTelegramChatUrl('https://t.me/joinchat/abc')).toBe(true);
+    expect(isTelegramChatUrl('https://t.me/')).toBe(false);
+    expect(isTelegramChatUrl('http://t.me/chat')).toBe(false);
+    expect(isTelegramChatUrl('https://t.me.evil.com/chat')).toBe(false);
+    expect(isTelegramChatUrl('https://evil.com/t.me/chat')).toBe(false);
+    expect(isTelegramChatUrl('javascript:alert(1)')).toBe(false);
+    expect(isTelegramChatUrl('t.me/chat')).toBe(false);
   });
 });
