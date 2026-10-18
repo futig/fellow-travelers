@@ -1,0 +1,150 @@
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  border-radius: var(--radius-l);
+  background: var(--shape-base);
+}
+
+.head {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.headText {
+  flex: 1;
+  min-width: 0;
+}
+
+.number {
+  font-weight: 700;
+  font-size: 16px;
+  line-height: 22px;
+}
+
+.meta {
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--text-soft);
+}
+
+.edit {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  font-size: 16px;
+  cursor: pointer;
+}
+
+.route {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.point {
+  display: flex;
+  flex-direction: column;
+}
+
+.end {
+  align-items: flex-end;
+}
+
+.time {
+  font-family: var(--font-mono);
+  font-weight: 500;
+  font-size: 24px;
+  line-height: 32px;
+  white-space: nowrap;
+}
+
+.late {
+  color: var(--text-error);
+}
+
+.shift {
+  margin-left: 2px;
+  font-family: var(--font-body);
+  font-weight: 700;
+  font-size: 12px;
+  line-height: 0;
+  color: var(--text-soft);
+}
+
+.planned {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--text-soft);
+}
+
+.line {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 8px;
+  height: 32px;
+  font-size: 16px;
+}
+
+.rule {
+  flex: 1;
+  height: 1px;
+  background: var(--line-base);
+}
+
+.cities {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: -8px;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--text-soft);
+}
+
+.cities > :last-child {
+  text-align: right;
+}
+
+.status {
+  font-weight: 700;
+  font-size: 12px;
+  line-height: 16px;
+  text-align: center;
+}
+
+.success {
+  color: var(--text-success);
+}
+
+.error {
+  color: var(--text-error);
+}
+
+.accent {
+  color: var(--text-accent);
+}
+
+.source {
+  font-size: 12px;
+  line-height: 16px;
+  text-align: center;
+  color: var(--text-pale);
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}

@@ -7,3 +7,7 @@
   margin: 0 auto;
   padding: 16px 16px 40px;
 }
+
+.center {
+  justify-content: center;
+}

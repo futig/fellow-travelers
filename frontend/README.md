@@ -7,7 +7,7 @@
 
 Vite, React 19, TypeScript (strict), npm. `@telegram-apps/sdk-react` (SDK Telegram), `openapi-fetch` +
 `openapi-typescript` (типы из контракта), TanStack Query, React Router (memory router), CSS Modules.
-Шрифты локальные: Arimo (`@fontsource/arimo`) и Martian Grotesk (OFL, `src/assets/fonts/`).
+Шрифты локальные: Arimo (`@fontsource/arimo`), Martian Mono (`@fontsource/martian-mono`) и Martian Grotesk (OFL, `src/assets/fonts/`).
 
 ## Команды
 
@@ -68,6 +68,8 @@ Telegram открывает мини-приложения только по HTTP
 Docker-образ собирается в два этапа (`node:24-alpine` -> `nginx:1.27-alpine`), статика отдаётся nginx
 (`nginx.conf`): `/api/` проксируется на сервис `api:8000`, `/assets/` кешируется навсегда, остальное —
 fallback на `index.html`.
+Защитные заголовки (CSP, `nosniff`, `Referrer-Policy`) — в `security-headers.conf`; он подключается
+в `server` и в каждом `location` со своим `add_header`. Inline-скриптов в сборке нет (`script-src 'self'`).
 
 ```bash
 cd ../backend

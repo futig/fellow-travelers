@@ -1,0 +1,32 @@
+.input {
+  box-shadow: inset 0 0 0 1px transparent;
+}
+
+.input:focus-visible {
+  box-shadow: inset 0 0 0 1px var(--line-accent);
+}
+
+.input::placeholder {
+  color: var(--text-pale);
+}
+
+.input:disabled {
+  color: var(--text-soft);
+}
+
+.invalid,
+.invalid:focus-visible {
+  box-shadow: inset 0 0 0 1px var(--text-error);
+}
+
+.textarea {
+  height: auto;
+  min-height: 50px;
+  resize: vertical;
+}
+
+.error {
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--text-error);
+}

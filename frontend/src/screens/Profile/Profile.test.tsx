@@ -87,13 +87,13 @@ describe('Profile', () => {
     ).toBeInTheDocument();
   });
 
-  it('прочие ошибки → сообщение и «Повторить»', async () => {
+  it('прочие ошибки → сообщение и «Повторить попытку»', async () => {
     fetchMe.mockRejectedValueOnce(new ApiError(500, 'INTERNAL_ERROR', 'Сервер недоступен'));
     renderProfile();
 
     expect(await screen.findByText('Сервер недоступен')).toBeInTheDocument();
     fetchMe.mockResolvedValue(baseMe);
-    screen.getByRole('button', { name: 'Повторить' }).click();
+    screen.getByRole('button', { name: /Повторить попытку/ }).click();
     expect(await screen.findByLabelText('Имя')).toHaveValue('Иван Петров');
   });
 });

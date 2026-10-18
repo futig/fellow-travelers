@@ -1,0 +1,52 @@
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.label {
+  font-size: 16px;
+  line-height: 22px;
+}
+
+.row {
+  display: flex;
+  gap: 12px;
+}
+
+.step,
+.value {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 54px;
+  border: 0;
+  border-radius: var(--radius-m);
+  background: var(--shape-base);
+  font-weight: 700;
+  font-size: 16px;
+  line-height: 22px;
+}
+
+.step {
+  flex: 0 0 52px;
+  color: var(--text-accent);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.step:disabled {
+  color: var(--shape-accent-disabled);
+  cursor: default;
+}
+
+.value {
+  flex: 1;
+  color: var(--text-heavy);
+}
+
+.hint {
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--text-soft);
+}

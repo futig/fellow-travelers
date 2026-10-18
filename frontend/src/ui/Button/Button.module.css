@@ -32,3 +32,34 @@
 .button:disabled {
   cursor: default;
 }
+
+.danger {
+  background: var(--shape-base);
+  color: var(--text-error);
+}
+
+.dark {
+  background: var(--shape-dark);
+  color: var(--text-inverted-heavy);
+}
+
+.secondary:disabled,
+.danger:disabled,
+.dark:disabled {
+  opacity: 0.5;
+}
+
+.icon {
+  font-size: 16px;
+  line-height: 1;
+}
+
+.group {
+  display: flex;
+  gap: 12px;
+}
+
+.group > * {
+  flex: 1 1 0;
+  min-width: 0;
+}

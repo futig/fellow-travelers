@@ -30,3 +30,19 @@ export function parseStartParam(raw: string | undefined): StartParam {
       return NONE;
   }
 }
+
+/** Первый экран по `start_param` (docs/frontend-plan.md, «Навигация»). */
+export function startParamToPath(sp: StartParam): string {
+  switch (sp.kind) {
+    case 'join':
+      return `/invite/${sp.code}`;
+    case 'event':
+      return `/events/${sp.eventId}`;
+    case 'admin':
+      return `/events/${sp.eventId}/admin`;
+    case 'adminList':
+      return '/?filter=admin';
+    case 'none':
+      return '/';
+  }
+}

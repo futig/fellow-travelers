@@ -1,21 +1,26 @@
 import { Button } from '../../ui/Button/Button';
+import { EmptyState } from '../../ui/EmptyState/EmptyState';
 import { Screen } from '../../ui/Screen/Screen';
-import { ScreenHeader } from '../../ui/ScreenHeader/ScreenHeader';
 import styles from './ErrorScreen.module.css';
 
 interface Props {
-  title: string;
+  title?: string;
   text: string;
   onRetry?: () => void;
 }
 
-export function ErrorScreen({ title, text, onRetry }: Props) {
+/** Страница ошибки: карточка 👀 с заголовком и текстом, «Повторить попытку →». */
+export function ErrorScreen({ title = 'Не удалось загрузить страницу', text, onRetry }: Props) {
   return (
-    <Screen>
-      <ScreenHeader title={title} subtitle={text} />
+    <Screen center>
+      <div className={styles.box} role="alert">
+        <EmptyState title={title} text={text} />
+      </div>
       {onRetry && (
         <div className={styles.footer}>
-          <Button onClick={onRetry}>Повторить</Button>
+          <Button onClick={onRetry} arrow="→">
+            Повторить попытку
+          </Button>
         </div>
       )}
     </Screen>

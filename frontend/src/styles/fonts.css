@@ -2,6 +2,11 @@
 @import '@fontsource/arimo/cyrillic-400.css';
 @import '@fontsource/arimo/latin-700.css';
 @import '@fontsource/arimo/cyrillic-700.css';
+/* Martian Mono, Evil Martians, SIL OFL 1.1: время рейсов */
+@import '@fontsource/martian-mono/latin-400.css';
+@import '@fontsource/martian-mono/cyrillic-400.css';
+@import '@fontsource/martian-mono/latin-500.css';
+@import '@fontsource/martian-mono/cyrillic-500.css';
 
 /* Martian Grotesk, Evil Martians, SIL OFL 1.1 (см. src/assets/fonts/OFL.txt) */
 @font-face {

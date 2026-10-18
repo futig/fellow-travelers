@@ -60,13 +60,7 @@ export function Profile() {
 
   if (error) {
     if (isUnauthorized(error)) return <OpenInTelegramScreen />;
-    return (
-      <ErrorScreen
-        title="Что-то пошло не так"
-        text={error.message}
-        onRetry={() => void refetch()}
-      />
-    );
+    return <ErrorScreen text={error.message} onRetry={() => void refetch()} />;
   }
 
   return (
@@ -92,7 +86,7 @@ export function Profile() {
         )}
       </div>
       <div className={styles.footer}>
-        <Button disabled={!me.has_phone} arrow="→" onClick={() => void navigate('/home')}>
+        <Button disabled={!me.has_phone} arrow="→" onClick={() => void navigate('/')}>
           Далее
         </Button>
       </div>
