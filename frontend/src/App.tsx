@@ -4,6 +4,7 @@ import { createQueryClient } from './api/queryClient';
 import { StartParamContext } from './lib/startParamContext';
 import { parseStartParam, startParamToPath } from './lib/startParam';
 import { getStartParamRaw } from './lib/telegram';
+import { GroupPlaceholder } from './screens/GroupPlaceholder/GroupPlaceholder';
 import { Home } from './screens/Home/Home';
 import { Invite } from './screens/Invite/Invite';
 import { Join } from './screens/Join/Join';
@@ -18,6 +19,9 @@ export const routes = [
   { path: '/profile', element: <Profile /> },
   { path: '/join', element: <Join /> },
   { path: '/invite/:code', element: <Invite /> },
+  // Заглушки до «Моей поездки» и «Управления» (инкременты 5 и 6).
+  { path: '/events/:id', element: <GroupPlaceholder /> },
+  { path: '/events/:id/admin', element: <GroupPlaceholder admin /> },
   // Неизвестный путь (в т.ч. deep link на ещё не готовый экран) — на «Мои группы».
   { path: '*', element: <Navigate to="/" replace /> },
 ];

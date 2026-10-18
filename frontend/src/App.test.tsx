@@ -4,10 +4,22 @@ import { createMemoryRouter, RouterProvider } from 'react-router';
 import { describe, expect, it, vi } from 'vitest';
 import { routes } from './App';
 
+const EVENT_ID = '3f2b8c1e-5a4d-4e6f-8a9b-0c1d2e3f4a5b';
+
 vi.mock('./lib/telegram', () => ({
   getStartParamRaw: () => undefined,
   getInitDataRaw: () => undefined,
   getInitDataPhotoUrl: () => undefined,
+}));
+vi.mock('./api/events', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./api/events')>()),
+  fetchMyEvents: async () => [],
+  fetchEvent: async (id: string) => ({
+    id,
+    title: 'Слёт в Геленджике',
+    starts_on: '2026-08-22',
+    ends_on: '2026-08-24',
+  }),
 }));
 
 function renderAt(path: string) {
@@ -22,11 +34,23 @@ function renderAt(path: string) {
 describe('маршрутизация', () => {
   it('/ — «Мои группы»', async () => {
     renderAt('/?filter=admin');
-    expect(await screen.findByRole('heading', { name: 'Мои группы' })).toBeInTheDocument();
+    expect(await screen.findByText('Вы пока не в группах')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Мои группы' })).toBeInTheDocument();
   });
 
-  it('deep link на ещё не готовый экран — редирект на «Мои группы»', async () => {
-    renderAt('/events/3f2b8c1e-5a4d-4e6f-8a9b-0c1d2e3f4a5b/admin');
-    expect(await screen.findByRole('heading', { name: 'Мои группы' })).toBeInTheDocument();
+  it('/join — ввод кода', () => {
+    renderAt('/join');
+    expect(screen.getByRole('heading', { name: 'Вступить в группу' })).toBeInTheDocument();
+  });
+
+  it('/events/:id/admin — экран группы (пока заглушка)', async () => {
+    renderAt(`/events/${EVENT_ID}/admin`);
+    expect(await screen.findByRole('heading', { name: 'Слёт в Геленджике' })).toBeInTheDocument();
+    expect(screen.getByText('Администратор')).toBeInTheDocument();
+  });
+
+  it('неизвестный путь — редирект на «Мои группы»', async () => {
+    renderAt(`/events/${EVENT_ID}/admin/settings`);
+    expect(await screen.findByText('Вы пока не в группах')).toBeInTheDocument();
   });
 });
