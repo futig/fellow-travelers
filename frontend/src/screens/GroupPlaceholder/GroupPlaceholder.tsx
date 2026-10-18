@@ -1,25 +1,16 @@
-import { useNavigate, useParams } from 'react-router';
-import { isApiErrorCode, isUnauthorized } from '../../api/errors';
+import { useParams } from 'react-router';
 import { useEvent } from '../../api/hooks';
 import { formatDateRange } from '../../lib/datetime';
 import { useBack } from '../../lib/useBack';
-import { Button } from '../../ui/Button/Button';
-import { EmptyState } from '../../ui/EmptyState/EmptyState';
 import { Screen } from '../../ui/Screen/Screen';
 import { ScreenHeader } from '../../ui/ScreenHeader/ScreenHeader';
 import { Skeleton } from '../../ui/Skeleton/Skeleton';
-import { ErrorScreen, OpenInTelegramScreen } from '../ErrorScreen/ErrorScreen';
+import { EventErrorScreen } from '../ErrorScreen/EventErrorScreen';
 import styles from './GroupPlaceholder.module.css';
 
-interface Props {
-  /** Открыто как управление группой (`/events/:id/admin`). */
-  admin?: boolean;
-}
-
-/** Временный экран группы до «Моей поездки» и «Управления» (инкременты 5 и 6). */
-export function GroupPlaceholder({ admin = false }: Props) {
+/** Временный экран «Моя поездка» (`/events/:id`) до инкремента 5. */
+export function GroupPlaceholder() {
   const eventId = useParams().id ?? '';
-  const navigate = useNavigate();
   useBack('/');
   const { data: event, error, isPending, refetch } = useEvent(eventId);
 
@@ -34,24 +25,13 @@ export function GroupPlaceholder({ admin = false }: Props) {
   }
 
   if (error) {
-    if (isUnauthorized(error)) return <OpenInTelegramScreen />;
-    if (isApiErrorCode(error, 'NOT_FOUND') || isApiErrorCode(error, 'VALIDATION_ERROR')) {
-      return (
-        <Screen center>
-          <EmptyState title="Группа не найдена" />
-          <div className={styles.footer}>
-            <Button onClick={() => void navigate('/')}>Мои группы</Button>
-          </div>
-        </Screen>
-      );
-    }
-    return <ErrorScreen text={error.message} onRetry={() => void refetch()} />;
+    return <EventErrorScreen error={error} eventId={eventId} onRetry={() => void refetch()} />;
   }
 
   return (
     <Screen>
       <ScreenHeader
-        eyebrow={admin ? 'Администратор' : 'Ваша поездка'}
+        eyebrow="Ваша поездка"
         title={event.title}
         subtitle={formatDateRange(event.starts_on, event.ends_on)}
       />

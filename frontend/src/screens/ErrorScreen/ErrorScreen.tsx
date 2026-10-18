@@ -7,19 +7,27 @@ interface Props {
   title?: string;
   text: string;
   onRetry?: () => void;
+  /** Своё действие вместо «Повторить попытку» (например «Мои группы»). */
+  action?: { label: string; onClick: () => void };
 }
 
 /** Страница ошибки: карточка 👀 с заголовком и текстом, «Повторить попытку →». */
-export function ErrorScreen({ title = 'Не удалось загрузить страницу', text, onRetry }: Props) {
+export function ErrorScreen({
+  title = 'Не удалось загрузить страницу',
+  text,
+  onRetry,
+  action,
+}: Props) {
+  const button = action ?? (onRetry && { label: 'Повторить попытку', onClick: onRetry });
   return (
     <Screen center>
       <div className={styles.box} role="alert">
         <EmptyState title={title} text={text} />
       </div>
-      {onRetry && (
+      {button && (
         <div className={styles.footer}>
-          <Button onClick={onRetry} arrow="→">
-            Повторить попытку
+          <Button onClick={button.onClick} arrow="→">
+            {button.label}
           </Button>
         </div>
       )}

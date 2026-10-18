@@ -22,4 +22,12 @@ describe('ErrorScreen', () => {
     ).toBeInTheDocument();
     expect(screen.queryByRole('button')).not.toBeInTheDocument();
   });
+
+  it('action — своя кнопка вместо «Повторить попытку»', async () => {
+    const onClick = vi.fn();
+    render(<ErrorScreen text="x" onRetry={vi.fn()} action={{ label: 'Мои группы', onClick }} />);
+    expect(screen.queryByRole('button', { name: /Повторить попытку/ })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: /Мои группы/ }));
+    expect(onClick).toHaveBeenCalledOnce();
+  });
 });

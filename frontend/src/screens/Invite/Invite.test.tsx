@@ -196,6 +196,12 @@ describe('Invite', () => {
     expect(screen.getByTestId('location')).toHaveTextContent(/^\/$/);
   });
 
+  it('неверный формат кода → «Мы не нашли группу» без запроса', async () => {
+    renderRoute('/invite/:code', <Invite />, '/invite/abc');
+    expect(await screen.findByText('Мы не нашли группу')).toBeInTheDocument();
+    expect(fetchInvitePreview).not.toHaveBeenCalled();
+  });
+
   it('нет initData → «Откройте приложение из Telegram»', async () => {
     fetchInvitePreview.mockRejectedValue(new NoInitDataError());
     renderInvite();

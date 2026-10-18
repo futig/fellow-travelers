@@ -36,6 +36,12 @@ function isTelegramWebLink(url: string): boolean {
   }
 }
 
+/** Ссылка на чат в Telegram: только `https://t.me/<что-то>`. */
+export function isTelegramChatUrl(url: string): boolean {
+  if (!isTelegramWebLink(url)) return false;
+  return new URL(url).pathname.length > 1;
+}
+
 /**
  * Открывает внешнюю ссылку: t.me — через `openTelegramLink`, прочее — через `openLink`,
  * вне Telegram — `window.open`. Небезопасные ссылки не открывает (возвращает false).

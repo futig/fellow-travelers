@@ -1,0 +1,30 @@
+.picker {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.message {
+  padding: 16px;
+  border-radius: var(--radius-l);
+  background: var(--shape-base);
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--text-soft);
+  text-align: center;
+}
+
+.error {
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--text-error);
+}

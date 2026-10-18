@@ -25,10 +25,10 @@ describe('GroupPlaceholder', () => {
       starts_on: '2026-08-22',
       ends_on: '2026-08-24',
     });
-    renderRoute('/events/:id/admin', <GroupPlaceholder admin />, `/events/${EVENT_ID}/admin`);
+    renderRoute('/events/:id', <GroupPlaceholder />, `/events/${EVENT_ID}`);
 
     expect(await screen.findByRole('heading', { name: 'Слёт в Геленджике' })).toBeInTheDocument();
-    expect(screen.getByText('Администратор')).toBeInTheDocument();
+    expect(screen.getByText('Ваша поездка')).toBeInTheDocument();
     expect(screen.getByText('22–24 августа 2026')).toBeInTheDocument();
     expect(screen.getByText('Экран группы появится в следующей версии')).toBeInTheDocument();
     expect(fetchEvent).toHaveBeenCalledWith(EVENT_ID);

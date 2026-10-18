@@ -1,5 +1,5 @@
 import type { components } from '../../api/schema';
-import { arrivalDayShift, formatTime } from '../../lib/datetime';
+import { arrivalDayShift, formatDayMonth, formatTime } from '../../lib/datetime';
 import { formatFlightNumber } from '../../lib/format';
 import { Option } from '../Option/Option';
 import styles from './FlightOption.module.css';
@@ -10,6 +10,8 @@ interface Props {
   trip: Trip;
   onClick?: () => void;
   disabled?: boolean;
+  /** Добавить к номеру дату вылета («SU 1148 · 22 августа») — для списков рейсов на разные дни. */
+  withDate?: boolean;
 }
 
 /** Строка маршрута «06:40 SVO → 10:40 GDZ» (+1 при прилёте на следующие сутки). */
@@ -29,11 +31,13 @@ export function flightRoute(trip: Trip): string {
 }
 
 /** Опция выбора рейса: номер и маршрут шрифтом Martian Mono. */
-export function FlightOption({ trip, onClick, disabled }: Props) {
+export function FlightOption({ trip, onClick, disabled, withDate = false }: Props) {
+  const number = formatFlightNumber(trip.number);
+  const date = formatDayMonth(trip.scheduled_departure, trip.departure_location.timezone);
   return (
     <Option
       leading="✈️"
-      title={formatFlightNumber(trip.number)}
+      title={withDate ? `${number} · ${date}` : number}
       subtitle={<span className={styles.route}>{flightRoute(trip)}</span>}
       onClick={onClick}
       disabled={disabled}

@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router';
+import { isInviteCode } from '../../lib/inviteCode';
 import { useBack } from '../../lib/useBack';
 import { Button } from '../../ui/Button/Button';
 import { Screen } from '../../ui/Screen/Screen';
@@ -8,7 +9,6 @@ import { TextInput } from '../../ui/TextInput/TextInput';
 import styles from './Join.module.css';
 
 const CODE_LENGTH = 6;
-const CODE_RE = /^[A-Z0-9]{6}$/;
 const ALLOWED_RE = /^[A-Z0-9]*$/;
 
 /** Ввод кода приглашения → превью `/invite/:code`. */
@@ -16,7 +16,7 @@ export function Join() {
   const navigate = useNavigate();
   useBack('/');
   const [code, setCode] = useState('');
-  const valid = CODE_RE.test(code);
+  const valid = isInviteCode(code);
   // Кириллица и знаки — частая ошибка при наборе: подсказываем сразу, а не молча блокируем кнопку.
   const error = ALLOWED_RE.test(code) ? undefined : 'Только латинские буквы и цифры';
 

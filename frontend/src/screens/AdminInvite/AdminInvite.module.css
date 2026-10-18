@@ -1,0 +1,68 @@
+.loading {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.content {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-top: 20px;
+}
+
+.warning {
+  padding: 16px;
+  border-radius: var(--radius-l);
+  background: var(--shape-base);
+  font-weight: 700;
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--text-error);
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 24px 16px;
+  border-radius: var(--radius-l);
+  background: var(--shape-base);
+  text-align: center;
+}
+
+.code {
+  font-family: var(--font-mono);
+  font-weight: 500;
+  font-size: 36px;
+  line-height: 44px;
+  letter-spacing: 0.12em;
+  color: var(--text-heavy);
+}
+
+.link {
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--text-soft);
+  overflow-wrap: anywhere;
+}
+
+.footer {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-top: 24px;
+}
+
+.status {
+  min-height: 20px;
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--text-success);
+  text-align: center;
+}
+
+.failed {
+  color: var(--text-error);
+}
