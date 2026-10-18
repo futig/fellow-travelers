@@ -80,6 +80,8 @@ def build_init_data(user: DevUser, bot_token: str, *, now: float | None = None) 
         "query_id": "AAH" + secrets.token_urlsafe(12),
         "user": json.dumps(payload, ensure_ascii=False, separators=(",", ":")),
         "auth_date": str(int(time.time() if now is None else now)),
+        # SDK мини-приложения требует поле signature; бэкенд его не проверяет, но хэширует
+        "signature": "dev",
     }
     return sign_init_data(fields, bot_token)
 
