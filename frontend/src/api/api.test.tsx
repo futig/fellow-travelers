@@ -212,7 +212,7 @@ describe('хуки', () => {
     expect(client.getQueryData(queryKeys.event(EVENT_ID))).toEqual(event);
   });
 
-  it('useJoin: мои группы, превью приглашения, поездка, админка', async () => {
+  it('useJoin: мои группы, поездка, админка (превью — нет)', async () => {
     const { client, wrapper } = setup();
     const spy = vi.spyOn(client, 'invalidateQueries');
     api.POST.mockResolvedValue(ok({ id: EVENT_ID, title: 'Конференция' }, 201));
@@ -220,7 +220,6 @@ describe('хуки', () => {
     await act(() => result.current.mutateAsync('k7q2zp'));
     expect(invalidatedKeys(spy)).toEqual([
       queryKeys.myEvents,
-      queryKeys.invitePreview('K7Q2ZP'),
       queryKeys.myTrip(EVENT_ID),
       queryKeys.admin(EVENT_ID),
     ]);

@@ -160,11 +160,12 @@ export function useJoin() {
   const client = useQueryClient();
   return useMutation({
     mutationFn: (code: string) => joinByInvite(code),
-    onSuccess: (event, code) => {
+    // Превью приглашения не инвалидируем: экран после вступления уходит,
+    // а при следующем открытии превью запросится заново.
+    onSuccess: (event) => {
       client.setQueryData(queryKeys.event(event.id), event);
       return invalidate(client, [
         queryKeys.myEvents,
-        queryKeys.invitePreview(code),
         queryKeys.myTrip(event.id),
         queryKeys.admin(event.id),
       ]);
