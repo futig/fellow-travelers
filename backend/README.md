@@ -37,6 +37,23 @@ docker compose up --build        # API на http://localhost:8000, провер�
 
 Без Docker: `.venv/Scripts/uvicorn app.main:app --reload` (нужен доступный PostgreSQL из `DATABASE_URL`).
 
+## Разработка в браузере без Telegram
+
+Бэкенд принимает только initData, подписанный `BOT_TOKEN`; для разработки её подписывает сам скрипт.
+
+```bash
+# backend/.env: BOT_TOKEN=любая-строка, DEBUG=true (без DEBUG скрипт откажется; обход — --force)
+# для удобства: INIT_DATA_MAX_AGE_SECONDS=604800 (initData живёт неделю)
+.venv/Scripts/alembic upgrade head
+.venv/Scripts/python -m app.seeds.locations          # аэропорты
+.venv/Scripts/python -m app.dev.users                # 3 пользователя с телефоном (--count до 5)
+.venv/Scripts/uvicorn app.main:app --reload
+```
+
+Скрипт идемпотентен и пишет `VITE_MOCK_TELEGRAM` и `VITE_DEV_USERS` в `../frontend/.env.development.local`
+(путь меняется через `--frontend-env`; остальные строки файла сохраняются). Дальше — `npm run dev` во frontend.
+Когда initData истечёт — перезапустите скрипт.
+
 ## Telegram-бот
 
 Бот (aiogram 3, long polling) показывает стартовое сообщение, получает телефон и даёт кнопки открытия
