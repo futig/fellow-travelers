@@ -1,0 +1,30 @@
+.card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 16px;
+  border-radius: var(--radius-l);
+  background: var(--shape-base);
+  text-align: center;
+}
+
+.icon {
+  margin-bottom: 8px;
+  font-size: 48px;
+  line-height: 56px;
+}
+
+.title {
+  font-weight: 700;
+  font-size: 16px;
+  line-height: 22px;
+  color: var(--text-accent);
+}
+
+.text {
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--text-soft);
+  overflow-wrap: anywhere;
+}

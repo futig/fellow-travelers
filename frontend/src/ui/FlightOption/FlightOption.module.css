@@ -1,0 +1,7 @@
+.route {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 16px;
+  text-transform: uppercase;
+  color: var(--text-soft);
+}
