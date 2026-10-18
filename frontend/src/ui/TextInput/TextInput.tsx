@@ -19,6 +19,8 @@ interface Props {
   disabled?: boolean;
   required?: boolean;
   autoComplete?: string;
+  /** Регистр экранной клавиатуры (`characters` — капс для кодов). */
+  autoCapitalize?: 'off' | 'none' | 'on' | 'sentences' | 'words' | 'characters';
   name?: string;
 }
 
@@ -38,6 +40,7 @@ export function TextInput({
   disabled,
   required,
   autoComplete,
+  autoCapitalize,
   name,
 }: Props) {
   const id = useId();
@@ -53,6 +56,7 @@ export function TextInput({
     disabled,
     required,
     autoComplete,
+    autoCapitalize,
     'aria-invalid': error ? true : undefined,
     'aria-describedby': describedBy,
   };

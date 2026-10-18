@@ -4,6 +4,7 @@ import { isUnauthorized } from '../../api/errors';
 import { fetchMe, meQueryKey } from '../../api/me';
 import { formatName, formatPhone } from '../../lib/format';
 import { getInitDataPhotoUrl } from '../../lib/telegram';
+import { useBack } from '../../lib/useBack';
 import { Avatar } from '../../ui/Avatar/Avatar';
 import { Button } from '../../ui/Button/Button';
 import { Field, FieldSkeleton } from '../../ui/Field/Field';
@@ -24,6 +25,7 @@ const NO_PHONE_HINT =
 
 export function Profile() {
   const navigate = useNavigate();
+  useBack('/');
   const {
     data: me,
     error,
