@@ -23,9 +23,9 @@ const TABS: readonly Tab<Filter>[] = [
 
 const PANEL_ID = 'my-groups-panel';
 
-/** Участник — в «Мою поездку», только админ — в управление группой. */
-function eventPath(event: EventSummary): string {
-  return event.is_participant ? `/events/${event.id}` : `/events/${event.id}/admin`;
+/** На «Управляю» карточка — всегда управление группой; на «Все» участник идёт в «Мою поездку». */
+function asAdmin(event: EventSummary, filter: Filter): boolean {
+  return filter === 'admin' || !event.is_participant;
 }
 
 /** «Мои группы» — стартовый экран, поэтому без кнопки «Назад». Вкладка — в `?filter=admin`. */
@@ -103,10 +103,16 @@ export function Home() {
               {visible.map((event) => (
                 <li key={event.id}>
                   <Option
-                    leading={event.is_participant ? '🧳' : '🛠️'}
+                    leading={asAdmin(event, filter) ? '🛠️' : '🧳'}
                     title={event.title}
                     subtitle={`${formatDateRange(event.starts_on, event.ends_on)} · ${eventStatusLabel(event)}`}
-                    onClick={() => void navigate(eventPath(event))}
+                    onClick={() =>
+                      void navigate(
+                        asAdmin(event, filter)
+                          ? `/events/${event.id}/admin`
+                          : `/events/${event.id}`,
+                      )
+                    }
                   />
                 </li>
               ))}

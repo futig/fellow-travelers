@@ -105,6 +105,28 @@ describe('Home', () => {
     expect(screen.getByTestId('location')).toHaveTextContent(`/events/${adminOnly.id}/admin`);
   });
 
+  it('«Управляю»: админ-участник ведёт в управление группой, иконка 🛠️', async () => {
+    const both: EventSummary = { ...participant, is_admin: true };
+    fetchMyEvents.mockResolvedValue([both]);
+    renderHome('/?filter=admin');
+
+    const card = await screen.findByRole('button', { name: /Слёт в Геленджике/ });
+    expect(card).toHaveTextContent('🛠️');
+    await userEvent.click(card);
+    expect(screen.getByTestId('location')).toHaveTextContent(`/events/${both.id}/admin`);
+  });
+
+  it('«Все»: админ-участник ведёт в «Мою поездку», иконка 🧳', async () => {
+    const both: EventSummary = { ...participant, is_admin: true };
+    fetchMyEvents.mockResolvedValue([both]);
+    renderHome();
+
+    const card = await screen.findByRole('button', { name: /Слёт в Геленджике/ });
+    expect(card).toHaveTextContent('🧳');
+    await userEvent.click(card);
+    expect(screen.getByTestId('location')).toHaveTextContent(new RegExp(`^/events/${both.id}$`));
+  });
+
   it('пустой список и «Ввести код приглашения» → /join', async () => {
     fetchMyEvents.mockResolvedValue([]);
     renderHome();
