@@ -4,6 +4,7 @@ import { createQueryClient } from './api/queryClient';
 import { StartParamContext } from './lib/startParamContext';
 import { parseStartParam, startParamToPath } from './lib/startParam';
 import { getStartParamRaw } from './lib/telegram';
+import { CreateEvent } from './screens/CreateEvent/CreateEvent';
 import { RouteError } from './screens/ErrorScreen/RouteError';
 import { GroupPlaceholder } from './screens/GroupPlaceholder/GroupPlaceholder';
 import { Home } from './screens/Home/Home';
@@ -24,6 +25,8 @@ export const routes: RouteObject[] = [
       { path: '/profile', element: <Profile /> },
       { path: '/join', element: <Join /> },
       { path: '/invite/:code', element: <Invite /> },
+      // `/events/new` — до `/events/:id` (для читаемости; роутер и так ранжирует статический сегмент выше).
+      { path: '/events/new', element: <CreateEvent /> },
       // Заглушки до «Моей поездки» и «Управления» (инкременты 5 и 6).
       { path: '/events/:id', element: <GroupPlaceholder /> },
       { path: '/events/:id/admin', element: <GroupPlaceholder admin /> },

@@ -1,0 +1,11 @@
+.dates {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.error {
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--text-error);
+}

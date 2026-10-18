@@ -45,6 +45,9 @@ export function Home() {
       <Button arrow="→" onClick={() => void navigate('/join')}>
         Ввести код приглашения
       </Button>
+      <Button variant="secondary" onClick={() => void navigate('/events/new')}>
+        Создать группу
+      </Button>
     </div>
   );
 

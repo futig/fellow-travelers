@@ -137,6 +137,13 @@ describe('Home', () => {
     expect(screen.getByTestId('location')).toHaveTextContent('/join');
   });
 
+  it('«Создать группу» → /events/new', async () => {
+    fetchMyEvents.mockResolvedValue([participant]);
+    renderHome();
+    await userEvent.click(await screen.findByRole('button', { name: 'Создать группу' }));
+    expect(screen.getByTestId('location')).toHaveTextContent('/events/new');
+  });
+
   it('загрузка — aria-busy', () => {
     fetchMyEvents.mockReturnValue(new Promise(() => {}));
     const { container } = renderHome();
