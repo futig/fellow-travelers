@@ -1,5 +1,6 @@
 import { act, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import type { InitialEntry } from 'react-router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiError } from '../../api/errors';
 import type { Me } from '../../api/me';
@@ -99,7 +100,7 @@ function makeApplication(overrides: Partial<Application> = {}): Application {
 }
 
 /** По умолчанию мастер открыт с экрана группы (есть куда вернуться). */
-function renderWizard(path = APPLY, history: string[] = [GROUP]) {
+function renderWizard(path: InitialEntry = APPLY, history: string[] = [GROUP]) {
   return renderRoute('/events/:id/apply', <ApplicationWizard />, path, history);
 }
 
@@ -355,6 +356,39 @@ describe('ApplicationWizard', () => {
       baggage_count: 2,
       max_wait_minutes: 30,
       seek_companions: true,
+    });
+  });
+
+  describe('seek_companions из статуса заявки', () => {
+    /** Сводка показывает строку попутчиков `companion`; отправка — тело PUT. */
+    async function submitReview(
+      app: Application,
+      companion: string,
+      state?: { seekCompanions: boolean },
+    ) {
+      api.fetchMyApplication.mockResolvedValue(app);
+      renderWizard({ pathname: APPLY, search: '?step=review', state });
+      expect(await screen.findByText(companion)).toBeInTheDocument();
+      await click(/Да, всё верно/);
+      expect(api.upsertMyApplication).toHaveBeenCalledTimes(1);
+      return api.upsertMyApplication.mock.calls[0]?.[1] as { seek_companions?: boolean };
+    }
+
+    it('solo → false: правка не возвращает в поиск', async () => {
+      const body = await submitReview(makeApplication({ status: 'solo' }), 'Не ищу попутчиков');
+      expect(body.seek_companions).toBe(false);
+    });
+
+    it('solo + state.seekCompanions → true', async () => {
+      const body = await submitReview(makeApplication({ status: 'solo' }), 'Лечу один', {
+        seekCompanions: true,
+      });
+      expect(body.seek_companions).toBe(true);
+    });
+
+    it('cancelled → true', async () => {
+      const body = await submitReview(makeApplication({ status: 'cancelled' }), 'Лечу один');
+      expect(body.seek_companions).toBe(true);
     });
   });
 

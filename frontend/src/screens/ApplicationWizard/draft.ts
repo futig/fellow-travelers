@@ -34,15 +34,19 @@ export function applyCompanionChoice(draft: Draft, choice: CompanionChoice): Dra
 }
 
 /**
- * Черновик из существующей заявки. `seek` — `true`: из мастера отправка снова запускает подбор
- * (в т.ч. после «Еду самостоятельно» ради правки, см. frontend-plan); «Не искать» выбирают явно.
+ * Черновик из существующей заявки. `seek` — `false` только для `solo`: правка данных у того,
+ * кто едет самостоятельно, не возвращает его в поиск. `seekCompanions` — явный запрос вернуться
+ * в поиск (экран поездки: `go-solo` перед правкой назначенной заявки).
  */
-export function draftFromApplication(app: Application | undefined): Draft {
+export function draftFromApplication(
+  app: Application | undefined,
+  { seekCompanions = false }: { seekCompanions?: boolean } = {},
+): Draft {
   if (!app) return {};
   return {
     trip: app.trip,
     withCompanion: app.with_companion,
-    seek: true,
+    seek: seekCompanions || app.status !== 'solo',
     baggageCount: Math.min(app.baggage_count, MAX_BAGGAGE),
     maxWait: app.max_wait_minutes,
   };

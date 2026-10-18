@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react';
-import { useParams, useSearchParams } from 'react-router';
+import { useLocation, useParams, useSearchParams } from 'react-router';
 import { isApiErrorCode } from '../../api/errors';
 import { useMyApplication, useUpsertApplication } from '../../api/hooks';
 import type { Application, Trip } from '../../api/types';
@@ -46,8 +46,17 @@ const SECTION_VIEW: Record<ReviewSection, View> = {
 const TRIP_UNAVAILABLE = 'Этот рейс больше недоступен — выберите другой';
 const JOIN_FIRST = 'Чтобы подать заявку, вступите в группу';
 
-function initialState(app: Application | undefined, openReview: boolean): WizardState {
-  const draft = draftFromApplication(app);
+/** `location.state` при открытии мастера: `seekCompanions` — предзаполнить «искать попутчиков». */
+export interface WizardLocationState {
+  seekCompanions?: boolean;
+}
+
+function initialState(
+  app: Application | undefined,
+  openReview: boolean,
+  seekCompanions: boolean,
+): WizardState {
+  const draft = draftFromApplication(app, { seekCompanions });
   const reviewReady = openReview && draftToInput(draft) !== null;
   return {
     stack: [reviewReady ? { name: 'review' } : { name: 'profile' }],
@@ -71,6 +80,8 @@ export function ApplicationWizard() {
   const eventId = useParams().id ?? '';
   const [searchParams] = useSearchParams();
   const openReview = searchParams.get('step') === 'review';
+  const locationState = useLocation().state as WizardLocationState | null;
+  const seekCompanions = locationState?.seekCompanions === true;
   // Выход из мастера: туда, откуда открыли, или на «Мою поездку» при открытии первым.
   const leave = useBackNavigation(`/events/${eventId}`);
   const application = useMyApplication(eventId);
@@ -81,7 +92,7 @@ export function ApplicationWizard() {
   const [state, setState] = useState<WizardState | null>(null);
   // Черновик заполняем один раз, когда стало известно, есть ли заявка.
   if (state === null && settled) {
-    setState(initialState(application.data, openReview));
+    setState(initialState(application.data, openReview, seekCompanions));
   }
 
   const upsert = useUpsertApplication(eventId);

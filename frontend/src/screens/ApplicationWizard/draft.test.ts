@@ -34,14 +34,18 @@ describe('draft', () => {
     expect(companionChoice({ withCompanion: true, seek: true })).toBe('plusOne');
   });
 
-  it('из заявки: все поля, seek=true', () => {
-    expect(draftFromApplication(makeApplication())).toEqual({
+  it('из заявки: все поля; seek=false только для solo', () => {
+    expect(draftFromApplication(makeApplication({ status: 'searching' }))).toEqual({
       trip,
       withCompanion: true,
       seek: true,
       baggageCount: 2,
       maxWait: 30,
     });
+    expect(draftFromApplication(makeApplication()).seek).toBe(false);
+    expect(draftFromApplication(makeApplication(), { seekCompanions: true }).seek).toBe(true);
+    expect(draftFromApplication(makeApplication({ status: 'cancelled' })).seek).toBe(true);
+    expect(draftFromApplication(makeApplication({ status: 'assigned' })).seek).toBe(true);
     expect(draftFromApplication(undefined)).toEqual({});
   });
 
