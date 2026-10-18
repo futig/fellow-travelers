@@ -14,6 +14,7 @@ import { Home } from './screens/Home/Home';
 import { Invite } from './screens/Invite/Invite';
 import { Join } from './screens/Join/Join';
 import { Profile } from './screens/Profile/Profile';
+import { Trips } from './screens/Trips/Trips';
 
 const queryClient = createQueryClient();
 
@@ -35,6 +36,7 @@ export const routes: RouteObject[] = [
       { path: '/events/:id/admin', element: <AdminHub /> },
       { path: '/events/:id/admin/settings', element: <EventSettings /> },
       { path: '/events/:id/admin/invite', element: <AdminInvite /> },
+      { path: '/events/:id/admin/trips', element: <Trips /> },
       // Неизвестный путь (в т.ч. deep link на ещё не готовый экран) — на «Мои группы».
       { path: '*', element: <Navigate to="/" replace /> },
     ],
