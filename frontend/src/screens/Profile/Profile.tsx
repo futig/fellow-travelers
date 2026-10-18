@@ -23,9 +23,21 @@ const HEADER = {
 const NO_PHONE_HINT =
   'Телефон нужен, чтобы попутчики могли с вами связаться. Без него нельзя отправить заявку.';
 
+/** Экран `/profile`: шаг «Ваши данные» сам по себе, «Далее» — на «Мои группы». */
 export function Profile() {
   const navigate = useNavigate();
   useBack('/');
+  return <ProfileForm onNext={() => void navigate('/')} />;
+}
+
+interface Props {
+  onNext: () => void;
+  /** Сообщение над кнопкой (например, бэкенд ответил PHONE_REQUIRED). */
+  notice?: string | null;
+}
+
+/** Шаг 1 «Ваши данные»: профиль из /me и «Поделиться номером»; «Далее» — только с телефоном. */
+export function ProfileForm({ onNext, notice }: Props) {
   const {
     data: me,
     error,
@@ -87,8 +99,13 @@ export function Profile() {
           </Button>
         )}
       </div>
+      {notice && (
+        <p className={styles.notice} role="alert">
+          {notice}
+        </p>
+      )}
       <div className={styles.footer}>
-        <Button disabled={!me.has_phone} arrow="→" onClick={() => void navigate('/')}>
+        <Button disabled={!me.has_phone} arrow="→" onClick={onNext}>
           Далее
         </Button>
       </div>
