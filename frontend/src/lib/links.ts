@@ -2,7 +2,6 @@ import { openLink, openTelegramLink } from '@telegram-apps/sdk-react';
 
 const USERNAME_RE = /^[A-Za-z0-9_]{4,32}$/;
 const PHONE_RE = /^\+?\d{5,15}$/;
-const SAFE_PROTOCOLS = new Set(['https:', 'tg:']);
 
 /** Ссылка на профиль Telegram; `null`, если username невалиден. */
 export function telegramUserUrl(username: string | null | undefined): string | null {
@@ -18,11 +17,11 @@ export function telUrl(phone: string | null | undefined): string | null {
   return PHONE_RE.test(clean) ? `tel:${clean}` : null;
 }
 
-/** Внешнюю ссылку открываем только со схемой `https:` или `tg:`. */
+/** Внешнюю ссылку открываем только со схемой `https:`. */
 export function isSafeExternalUrl(url: string | null | undefined): url is string {
   if (!url) return false;
   try {
-    return SAFE_PROTOCOLS.has(new URL(url).protocol);
+    return new URL(url).protocol === 'https:';
   } catch {
     return false;
   }
@@ -48,7 +47,7 @@ export function openExternal(url: string): boolean {
       openTelegramLink(url);
       return true;
     }
-    if (url.startsWith('https:') && openLink.isAvailable()) {
+    if (openLink.isAvailable()) {
       openLink(url);
       return true;
     }

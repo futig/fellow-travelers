@@ -40,7 +40,8 @@ describe('telegramUserUrl / telUrl', () => {
 describe('isSafeExternalUrl', () => {
   it.each([
     ['https://t.me/chat', true],
-    ['tg://resolve?domain=x', true],
+    ['tg://resolve?domain=x', false],
+    ['HTTPS://example.com', true],
     ['http://example.com', false],
     ['javascript:alert(1)', false],
     ['data:text/html,x', false],
@@ -83,6 +84,9 @@ describe('openExternal', () => {
 
   it('небезопасная ссылка не открывается', () => {
     expect(openExternal('javascript:alert(1)')).toBe(false);
+    expect(openExternal('tg://resolve?domain=x')).toBe(false);
+    expect(openExternal('http://example.com')).toBe(false);
+    expect(sdk.openTelegramLink).not.toHaveBeenCalled();
     expect(windowOpen).not.toHaveBeenCalled();
     expect(sdk.openLink).not.toHaveBeenCalled();
   });
