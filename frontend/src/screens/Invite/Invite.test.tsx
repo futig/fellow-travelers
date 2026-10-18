@@ -1,8 +1,9 @@
-import { screen } from '@testing-library/react';
+import { act, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiError, NoInitDataError } from '../../api/errors';
 import type { Event, InvitePreview } from '../../api/types';
+import { useBack } from '../../lib/useBack';
 import { renderRoute } from '../../test/render';
 import { Invite } from './Invite';
 
@@ -43,6 +44,12 @@ const event: Event = {
   is_participant: true,
 };
 
+/** Экран группы с кнопкой «Назад» (как у настоящего — через useBack). */
+function GroupStub() {
+  const back = useBack('/');
+  return <button onClick={back}>Назад из группы</button>;
+}
+
 /** По умолчанию — как по deep link: превью открыто первым экраном. */
 function renderInvite(history: string[] = []) {
   return renderRoute('/invite/:code', <Invite />, '/invite/k7q2zp', history);
@@ -82,20 +89,35 @@ describe('Invite', () => {
     expect(screen.getByRole('button', { name: /Вступить/ })).toBeDisabled();
     expect(joinByInvite).toHaveBeenCalledWith('K7Q2ZP');
 
-    fetchInvitePreview.mockResolvedValue({ ...preview, already_member: true });
     resolveJoin(event);
     expect(await screen.findByTestId('location')).toHaveTextContent(`/events/${EVENT_ID}`);
     expect(router.state.historyAction).toBe('REPLACE');
-    expect(screen.queryByRole('button', { name: /Перейти в группу/ })).not.toBeInTheDocument();
+    expect(fetchInvitePreview).toHaveBeenCalledTimes(1);
   });
 
-  it('already_member → «Перейти в группу» с заменой записи', async () => {
+  it('Home → Join → Invite → вступление → группа → Назад → Home', async () => {
+    fetchInvitePreview.mockResolvedValue(preview);
+    joinByInvite.mockResolvedValue(event);
+    renderRoute(
+      '/invite/:code',
+      <Invite />,
+      '/invite/K7Q2ZP',
+      ['/', '/join'],
+      [{ path: '/events/:id', element: <GroupStub /> }],
+    );
+
+    await clickJoin();
+    await userEvent.click(await screen.findByRole('button', { name: 'Назад из группы' }));
+    expect(screen.getByTestId('location')).toHaveTextContent(/^\/$/);
+  });
+
+  it('already_member → сразу в группу с заменой записи, без промежуточного экрана', async () => {
     fetchInvitePreview.mockResolvedValue({ ...preview, already_member: true });
     const { router } = renderInvite();
 
-    await userEvent.click(await screen.findByRole('button', { name: /Перейти в группу/ }));
-    expect(screen.getByTestId('location')).toHaveTextContent(`/events/${EVENT_ID}`);
+    expect(await screen.findByTestId('location')).toHaveTextContent(`/events/${EVENT_ID}`);
     expect(router.state.historyAction).toBe('REPLACE');
+    expect(router.state.location.state).toEqual({ firstEntry: true });
     expect(screen.queryByRole('button', { name: /Вступить/ })).not.toBeInTheDocument();
   });
 
@@ -132,16 +154,32 @@ describe('Invite', () => {
     expect(screen.getByRole('button', { name: /Вступить/ })).toBeEnabled();
   });
 
-  it('404 INVITE_NOT_FOUND → «Мы не нашли группу» и «Ввести другой код»', async () => {
+  it('404 по deep link → «Мы не нашли группу», «Ввести другой код» открывает ввод кода', async () => {
     fetchInvitePreview.mockRejectedValue(
       new ApiError(404, 'INVITE_NOT_FOUND', 'Приглашение не найдено'),
     );
-    renderInvite();
+    const { router } = renderInvite();
 
     expect(await screen.findByText('Мы не нашли группу')).toBeInTheDocument();
     expect(screen.getByText('Проверьте код приглашения')).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: /Ввести другой код/ }));
     expect(screen.getByTestId('location')).toHaveTextContent('/join');
+    expect(router.state.historyAction).toBe('REPLACE');
+  });
+
+  it('Home → Join → Invite (404) → «Ввести другой код» → Назад → Home', async () => {
+    fetchInvitePreview.mockRejectedValue(
+      new ApiError(404, 'INVITE_NOT_FOUND', 'Приглашение не найдено'),
+    );
+    const { router } = renderInvite(['/', '/join']);
+
+    await userEvent.click(await screen.findByRole('button', { name: /Ввести другой код/ }));
+    expect(screen.getByTestId('location')).toHaveTextContent('/join');
+    expect(router.state.historyAction).toBe('POP');
+
+    // «Назад» с ввода кода (useBack при наличии истории) — navigate(-1).
+    await act(() => router.navigate(-1));
+    expect(screen.getByTestId('location')).toHaveTextContent(/^\/$/);
   });
 
   it('нет initData → «Откройте приложение из Telegram»', async () => {

@@ -1,8 +1,9 @@
+import { useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import { isApiErrorCode, isUnauthorized } from '../../api/errors';
 import { useInvitePreview, useJoin } from '../../api/hooks';
 import { formatDateRange } from '../../lib/datetime';
-import { useBack, useReplace } from '../../lib/useBack';
+import { useBack, useIsFirstEntry, useReplace } from '../../lib/useBack';
 import { Button } from '../../ui/Button/Button';
 import { EmptyState } from '../../ui/EmptyState/EmptyState';
 import { Screen } from '../../ui/Screen/Screen';
@@ -27,11 +28,32 @@ export function Invite() {
   const code = (useParams().code ?? '').toUpperCase();
   const navigate = useNavigate();
   const replace = useReplace();
+  const first = useIsFirstEntry();
   useBack('/');
   const { data: preview, error, isPending, refetch } = useInvitePreview(code);
   const join = useJoin();
+  const alreadyMember = preview?.already_member === true;
 
-  if (isPending) {
+  // Уже в группе — сразу в неё, без промежуточного экрана.
+  useEffect(() => {
+    if (alreadyMember && preview) replace(`/events/${preview.event_id}`);
+  }, [alreadyMember, preview, replace]);
+
+  /** Вступил: группа становится «первым» экраном — её «Назад» ведёт на «Мои группы», а не на ввод кода. */
+  function onJoin() {
+    join.mutate(code, {
+      onSuccess: (event) => replace(`/events/${event.id}`, { asFirst: true }),
+    });
+  }
+
+  /** С ввода кода — вернуться на него, по deep link — открыть ввод кода вместо превью. */
+  function onOtherCode() {
+    if (first) replace('/join');
+    else void navigate(-1);
+  }
+
+  // Успешное вступление и переход в группу проверяем раньше ошибок — до перехода держим загрузку.
+  if (isPending || join.isSuccess || alreadyMember) {
     return (
       <Screen>
         <div aria-busy="true" className={styles.loading}>
@@ -54,7 +76,7 @@ export function Invite() {
       <Screen center>
         <EmptyState title="Мы не нашли группу" text="Проверьте код приглашения" />
         <div className={styles.footer}>
-          <Button arrow="→" onClick={() => replace('/join')}>
+          <Button arrow="→" onClick={onOtherCode}>
             Ввести другой код
           </Button>
         </div>
@@ -70,25 +92,6 @@ export function Invite() {
       subtitle={formatDateRange(preview.starts_on, preview.ends_on)}
     />
   );
-  // После успешного вступления превью перезапрашивается (already_member) — до перехода держим кнопку.
-  const joining = join.isPending || join.isSuccess;
-
-  if (preview.already_member && !joining) {
-    return (
-      <Screen>
-        {header}
-        <div className={styles.content}>
-          <p className={styles.card}>Вы уже в этой группе.</p>
-        </div>
-        <div className={styles.footer}>
-          <Button arrow="→" onClick={() => replace(`/events/${preview.event_id}`)}>
-            Перейти в группу
-          </Button>
-        </div>
-      </Screen>
-    );
-  }
-
   if (!preview.join_open || isApiErrorCode(join.error, 'JOIN_CLOSED')) {
     return (
       <Screen>
@@ -117,11 +120,9 @@ export function Invite() {
       <div className={styles.footer}>
         <Button
           arrow="→"
-          disabled={joining}
-          aria-busy={joining || undefined}
-          onClick={() =>
-            join.mutate(code, { onSuccess: (event) => replace(`/events/${event.id}`) })
-          }
+          disabled={join.isPending}
+          aria-busy={join.isPending || undefined}
+          onClick={onJoin}
         >
           Вступить
         </Button>
