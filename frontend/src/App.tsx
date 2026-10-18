@@ -5,6 +5,7 @@ import { StartParamContext } from './lib/startParamContext';
 import { parseStartParam, startParamToPath } from './lib/startParam';
 import { getStartParamRaw } from './lib/telegram';
 import { Home } from './screens/Home/Home';
+import { Join } from './screens/Join/Join';
 import { Profile } from './screens/Profile/Profile';
 
 const queryClient = createQueryClient();
@@ -14,6 +15,7 @@ const startParam = parseStartParam(getStartParamRaw());
 export const routes = [
   { path: '/', element: <Home /> },
   { path: '/profile', element: <Profile /> },
+  { path: '/join', element: <Join /> },
   // Неизвестный путь (в т.ч. deep link на ещё не готовый экран) — на «Мои группы».
   { path: '*', element: <Navigate to="/" replace /> },
 ];
