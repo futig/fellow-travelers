@@ -49,20 +49,28 @@ export function useReplace(): (to: string, options?: ReplaceOptions) => void {
 }
 
 /**
- * «Назад» экрана: на предыдущую запись истории, а если экран открыт первым (deep link) —
- * на `fallbackPath` с заменой. Показывает BackButton Telegram и возвращает тот же обработчик
- * для кнопок на экране.
+ * Обработчик «уйти с экрана назад» без BackButton: на предыдущую запись истории, а если экран
+ * открыт первым (deep link) — на `fallbackPath` с заменой. Для экранов со своей логикой «Назад»
+ * (мастер заявки), которые сами показывают BackButton.
  */
-export function useBack(fallbackPath = '/'): () => void {
+export function useBackNavigation(fallbackPath = '/'): () => void {
   const navigate = useNavigate();
   const first = useIsFirstEntry();
-  const back = useCallback(() => {
+  return useCallback(() => {
     if (first) {
       void navigate(fallbackPath, { replace: true, state: FIRST_ENTRY });
     } else {
       void navigate(-1);
     }
   }, [navigate, first, fallbackPath]);
+}
+
+/**
+ * «Назад» экрана (`useBackNavigation`) с BackButton Telegram; возвращает тот же обработчик
+ * для кнопок на экране.
+ */
+export function useBack(fallbackPath = '/'): () => void {
+  const back = useBackNavigation(fallbackPath);
   useBackButton(back);
   return back;
 }

@@ -5,6 +5,7 @@ import {
   formatDateRange,
   formatDayMonth,
   formatTime,
+  isoDateInZone,
   isoToLocalInput,
   localInputToApi,
   plural,
@@ -47,6 +48,12 @@ describe('formatTime / formatDayMonth', () => {
   it('«22 августа» в поясе точки', () => {
     expect(formatDayMonth('2026-08-22T08:40:00+03:00', 'Europe/Moscow')).toBe('22 августа');
     expect(formatDayMonth('2026-08-22T01:00:00+03:00', 'UTC')).toBe('21 августа');
+  });
+
+  it('isoDateInZone: дата в поясе точки как YYYY-MM-DD', () => {
+    // 00:30 по Москве — это ещё 21-е по UTC.
+    expect(isoDateInZone('2026-08-21T21:30:00Z', 'Europe/Moscow')).toBe('2026-08-22');
+    expect(isoDateInZone('2026-08-21T21:30:00Z', 'UTC')).toBe('2026-08-21');
   });
 });
 

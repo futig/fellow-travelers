@@ -77,6 +77,12 @@ export function formatDayMonth(iso: string, timeZone: string): string {
   return `${Number(p.day)} ${MONTHS_GENITIVE[Number(p.month) - 1] ?? ''}`;
 }
 
+/** Дата момента в поясе `timeZone` как `YYYY-MM-DD` (значение `<input type="date">`). */
+export function isoDateInZone(iso: string, timeZone: string): string {
+  const p = partsInZone(iso, timeZone);
+  return `${p.year}-${p.month}-${p.day}`;
+}
+
 function calendarDayNumber(p: Parts): number {
   return Date.UTC(Number(p.year), Number(p.month) - 1, Number(p.day)) / DAY_MS;
 }

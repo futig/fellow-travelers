@@ -8,3 +8,11 @@
 .footer {
   padding-top: 24px;
 }
+
+.notice {
+  margin: 0;
+  padding-top: 16px;
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--text-error);
+}
