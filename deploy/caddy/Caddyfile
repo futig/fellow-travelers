@@ -1,0 +1,13 @@
+{
+	email {$ACME_EMAIL}
+	acme_ca {$ACME_CA}
+}
+
+{$SITE_ADDRESS} {
+	reverse_proxy web:80
+
+	log {
+		output stdout
+		format console
+	}
+}

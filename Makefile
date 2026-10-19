@@ -11,7 +11,7 @@ FRONTEND := frontend
 VENV     := $(BACKEND)/.venv
 PY       := $(CURDIR)/$(VENV)/bin/python
 BIN      := $(CURDIR)/$(VENV)/bin
-COMPOSE  := docker compose --project-directory $(BACKEND)
+COMPOSE  := docker compose
 
 # Сколько тестовых пользователей создавать (1..5).
 DEV_USERS ?= 3
