@@ -78,6 +78,8 @@ jobs:
           context: ./backend
           push: true
           tags: cr.yandex/${{ secrets.YC_REGISTRY_ID }}/api:${{ github.sha }}
+          provenance: false
+          sbom: false
           cache-from: type=gha,scope=api
           cache-to: type=gha,mode=max,scope=api
 
@@ -88,6 +90,8 @@ jobs:
           build-args: VITE_BOT_USERNAME=${{ secrets.BOT_USERNAME }}
           push: true
           tags: cr.yandex/${{ secrets.YC_REGISTRY_ID }}/web:${{ github.sha }}
+          provenance: false
+          sbom: false
           cache-from: type=gha,scope=web
           cache-to: type=gha,mode=max,scope=web
 
@@ -97,6 +101,8 @@ jobs:
           context: ./deploy/caddy
           push: true
           tags: cr.yandex/${{ secrets.YC_REGISTRY_ID }}/caddy:${{ github.sha }}
+          provenance: false
+          sbom: false
           cache-from: type=gha,scope=caddy
           cache-to: type=gha,mode=max,scope=caddy
 
