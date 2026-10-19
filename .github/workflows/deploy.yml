@@ -8,6 +8,7 @@ on:
       - frontend/**
       - deploy/**
       - .github/workflows/deploy.yml
+      - .github/scripts/**
   workflow_dispatch:
 
 concurrency:
@@ -26,7 +27,6 @@ jobs:
       - name: Проверить, что секреты заданы
         env:
           YC_SA_KEY: ${{ secrets.YC_SA_KEY }}
-          YC_FOLDER_ID: ${{ secrets.YC_FOLDER_ID }}
           YC_REGISTRY_ID: ${{ secrets.YC_REGISTRY_ID }}
           YC_VM_ID: ${{ secrets.YC_VM_ID }}
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
@@ -36,7 +36,7 @@ jobs:
           ACME_EMAIL: ${{ secrets.ACME_EMAIL }}
         run: |
           missing=""
-          for name in YC_SA_KEY YC_FOLDER_ID YC_REGISTRY_ID YC_VM_ID \
+          for name in YC_SA_KEY YC_REGISTRY_ID YC_VM_ID \
                       BOT_TOKEN BOT_USERNAME POSTGRES_PASSWORD SITE_ADDRESS ACME_EMAIL; do
             [ -n "${!name}" ] || missing="$missing $name"
           done
@@ -59,20 +59,18 @@ jobs:
 
       - uses: docker/setup-buildx-action@v3
 
-      - name: Установить yc CLI
-        run: |
-          curl -sSL https://storage.yandexcloud.net/yandexcloud-yc/install.sh | bash -s -- -i "$HOME/yc" -n
-          echo "$HOME/yc/bin" >> "$GITHUB_PATH"
-
-      - name: Авторизоваться в Yandex Cloud и в реестре
+      - name: Получить IAM-токен и войти в реестр
         env:
           YC_SA_KEY: ${{ secrets.YC_SA_KEY }}
-          YC_FOLDER_ID: ${{ secrets.YC_FOLDER_ID }}
         run: |
           printf '%s' "$YC_SA_KEY" > "$RUNNER_TEMP/sa-key.json"
-          yc config set service-account-key "$RUNNER_TEMP/sa-key.json"
-          yc config set folder-id "$YC_FOLDER_ID"
-          yc iam create-token | docker login --username iam --password-stdin cr.yandex
+          python3 -m venv "$RUNNER_TEMP/venv"
+          "$RUNNER_TEMP/venv/bin/pip" install --quiet pyjwt cryptography
+          token=$(YC_KEY_FILE="$RUNNER_TEMP/sa-key.json" \
+            "$RUNNER_TEMP/venv/bin/python" .github/scripts/yc-iam-token.py)
+          echo "::add-mask::$token"
+          echo "IAM_TOKEN=$token" >> "$GITHUB_ENV"
+          printf '%s' "$token" | docker login --username iam --password-stdin cr.yandex
 
       - name: Образ бэкенда (api и bot)
         uses: docker/build-push-action@v6
@@ -126,15 +124,36 @@ jobs:
       - name: Обновить контейнеры на ВМ
         env:
           YC_VM_ID: ${{ secrets.YC_VM_ID }}
-        run: yc compute instance update-container "$YC_VM_ID" --docker-compose-file "$RUNNER_TEMP/spec.yml" >/dev/null
+        run: |
+          jq -n --rawfile spec "$RUNNER_TEMP/spec.yml" '{upsert: {"docker-compose": $spec}}' \
+            > "$RUNNER_TEMP/metadata.json"
+          operation=$(curl -sS --fail-with-body -X POST \
+            -H "Authorization: Bearer $IAM_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d @"$RUNNER_TEMP/metadata.json" \
+            "https://compute.api.cloud.yandex.net/compute/v1/instances/$YC_VM_ID/updateMetadata" \
+            | jq -r .id)
+          echo "операция: $operation"
+          for i in $(seq 1 30); do
+            result=$(curl -sS -H "Authorization: Bearer $IAM_TOKEN" \
+              "https://operation.api.cloud.yandex.net/operations/$operation")
+            if [ "$(echo "$result" | jq -r '.done // false')" = "true" ]; then
+              error=$(echo "$result" | jq -r '.error.message // empty')
+              if [ -n "$error" ]; then echo "::error::$error"; exit 1; fi
+              echo "спецификация обновлена"; exit 0
+            fi
+            sleep 5
+          done
+          echo "::error::операция не завершилась за 150 секунд"; exit 1
 
       - name: Проверить, что сайт отвечает
         continue-on-error: true
         env:
           YC_VM_ID: ${{ secrets.YC_VM_ID }}
         run: |
-          ip=$(yc compute instance get --id "$YC_VM_ID" --format json \
-            | jq -r '.network_interfaces[0].primary_v4_address.one_to_one_nat.address')
+          ip=$(curl -sS -H "Authorization: Bearer $IAM_TOKEN" \
+            "https://compute.api.cloud.yandex.net/compute/v1/instances/$YC_VM_ID" \
+            | jq -r '.networkInterfaces[0].primaryV4Address.oneToOneNat.address')
           echo "Публичный IP: $ip"
           for i in $(seq 1 30); do
             code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 "http://$ip/" || true)
