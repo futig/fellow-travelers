@@ -126,7 +126,7 @@ jobs:
       - name: Обновить контейнеры на ВМ
         env:
           YC_VM_ID: ${{ secrets.YC_VM_ID }}
-        run: yc compute instance update-container "$YC_VM_ID" --docker-compose-file "$RUNNER_TEMP/spec.yml"
+        run: yc compute instance update-container "$YC_VM_ID" --docker-compose-file "$RUNNER_TEMP/spec.yml" >/dev/null
 
       - name: Проверить, что сайт отвечает
         continue-on-error: true
