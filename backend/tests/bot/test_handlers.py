@@ -4,6 +4,7 @@ from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters import CommandObject
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.storage.base import StorageKey
@@ -45,7 +46,10 @@ def make_message(*, user_id: int = TG_ID, contact: Contact | None = None) -> Mag
     message = MagicMock()
     message.from_user = TgUser(id=user_id, is_bot=False, first_name="Анна", username="anna")
     message.contact = contact
-    message.answer = AsyncMock()
+    sent = MagicMock()
+    sent.delete = AsyncMock()
+    message.sent = sent
+    message.answer = AsyncMock(return_value=sent)
     return message
 
 
@@ -87,9 +91,16 @@ async def test_start_without_phone_requests_contact(
     markup = last_markup(message)
     assert isinstance(markup, ReplyKeyboardMarkup)
     assert markup.keyboard[0][0].request_contact is True
-    assert markup.one_time_keyboard
+    assert markup.keyboard[0][0].text == "Поделиться контактом"
+    assert markup.keyboard[0][0].style == "primary"
     assert markup.resize_keyboard
-    assert "телефон" in message.answer.call_args.args[0]
+    assert markup.is_persistent
+    assert not markup.one_time_keyboard
+    assert markup.input_field_placeholder == "Нажмите «Поделиться контактом»"
+    assert message.answer.await_count == 1
+    assert message.answer.call_args.args[0] == (
+        "Чтобы начать, поделитесь контактом — он понадобится для связи"
+    )
     user = await get_user(db_session)
     assert user is not None
     assert user.first_name == "Анна"
@@ -103,6 +114,7 @@ async def test_start_with_phone_shows_inline_buttons(
     await share(state)
     message = await start(state)
     markup = last_markup(message)
+    assert message.answer.call_args.args[0] == texts.READY_NO_CODE
     assert isinstance(markup, InlineKeyboardMarkup)
     assert inline_urls(markup) == [
         "https://t.me/test_bot?startapp",
@@ -118,6 +130,9 @@ async def test_start_with_phone_and_join_code_shows_join_button(
     await share(state)
     message = await start(state, "join_ABC123")
     markup = last_markup(message)
+    assert message.answer.call_args.args[0] == (
+        "Готово, теперь можно перейти к данным о рейсе, чтобы найти попутчиков"
+    )
     assert isinstance(markup, InlineKeyboardMarkup)
     assert inline_texts(markup) == [texts.JOIN_BUTTON, texts.ADMIN_BUTTON]
     assert inline_urls(markup) == [
@@ -132,13 +147,28 @@ async def test_join_payload_survives_contact(db_session: AsyncSession, state: FS
     assert answer.answer.await_count == 2
     first = answer.answer.call_args_list[0]
     assert isinstance(first.kwargs["reply_markup"], ReplyKeyboardRemove)
+    answer.sent.delete.assert_awaited_once()
+    assert answer.answer.call_args.args[0] == texts.READY_JOIN
     markup = last_markup(answer)
     assert isinstance(markup, InlineKeyboardMarkup)
     assert inline_urls(markup)[0] == "https://t.me/test_bot?startapp=join_ABC123"
-    assert inline_texts(markup)[0] == texts.JOIN_BUTTON
+    assert inline_texts(markup)[0] == "Заполнить данные о рейсе →"
     user = await get_user(db_session)
     assert user is not None
     assert user.phone == "+79991234567"
+
+
+async def test_contact_survives_delete_failure(db_session: AsyncSession, state: FSMContext) -> None:
+    await start(state)
+    message = make_message(
+        contact=Contact(phone_number="79991234567", first_name="А", user_id=TG_ID)
+    )
+    message.sent.delete = AsyncMock(
+        side_effect=TelegramBadRequest(method=MagicMock(), message="message can't be deleted")
+    )
+    await handlers.on_contact(message, state)
+    assert message.answer.await_count == 2
+    assert isinstance(last_markup(message), InlineKeyboardMarkup)
 
 
 async def test_plain_start_forgets_previous_invite(
@@ -191,6 +221,7 @@ async def test_other_message_without_phone(db_session: AsyncSession, state: FSMC
     message = make_message()
     await handlers.on_other(message, state)
     assert isinstance(last_markup(message), ReplyKeyboardMarkup)
+    assert message.answer.call_args.args[0] == texts.PHONE_REQUEST
 
 
 async def test_other_message_with_phone(db_session: AsyncSession, state: FSMContext) -> None:
@@ -198,6 +229,7 @@ async def test_other_message_with_phone(db_session: AsyncSession, state: FSMCont
     message = make_message()
     await handlers.on_other(message, state)
     assert isinstance(last_markup(message), InlineKeyboardMarkup)
+    assert message.answer.call_args.args[0] == texts.HINT
 
 
 def test_mini_app_link() -> None:
