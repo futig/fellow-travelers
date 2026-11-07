@@ -1,7 +1,7 @@
 services:
   db:
     container_name: db
-    image: postgres:16-alpine
+    image: postgres:16.15-alpine
     environment:
       POSTGRES_USER: fellow
       POSTGRES_PASSWORD: "${POSTGRES_PASSWORD}"
@@ -16,7 +16,7 @@ services:
     command: >
       sh -c "alembic upgrade head
       && python -m app.seeds.locations
-      && uvicorn app.main:app --host 0.0.0.0 --port 8000"
+      && uvicorn app.main:app --host 0.0.0.0 --port 8000 --no-access-log"
     environment:
       DATABASE_URL: "postgresql+asyncpg://fellow:${POSTGRES_PASSWORD}@db:5432/fellow_travelers"
       BOT_TOKEN: "${BOT_TOKEN}"
@@ -39,6 +39,27 @@ services:
       DEBUG: "${DEBUG}"
     depends_on:
       - db
+    restart: always
+
+  worker:
+    container_name: worker
+    image: "${API_IMAGE}"
+    command: python -m app.worker
+    environment:
+      DATABASE_URL: "postgresql+asyncpg://fellow:${POSTGRES_PASSWORD}@db:5432/fellow_travelers"
+      BOT_TOKEN: "${BOT_TOKEN}"
+      BOT_USERNAME: "${BOT_USERNAME}"
+      INIT_DATA_MAX_AGE_SECONDS: ${INIT_DATA_MAX_AGE_SECONDS}
+      DEBUG: "${DEBUG}"
+    depends_on:
+      - db
+    # метрики воркера на порту 9100 доступны только внутри сети compose
+    healthcheck:
+      test: ["CMD", "python", "-m", "app.worker.healthcheck"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
     restart: always
 
   web:
@@ -68,7 +89,7 @@ services:
 
   backup:
     container_name: backup
-    image: postgres:16-alpine
+    image: postgres:16.15-alpine
     entrypoint: ["/bin/sh", "-c"]
     command:
       - |

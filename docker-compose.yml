@@ -15,7 +15,7 @@ x-backend: &backend
 
 services:
   db:
-    image: postgres:16-alpine
+    image: postgres:16.15-alpine
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-fellow}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-fellow}
@@ -68,6 +68,23 @@ services:
         condition: service_healthy
       migrate:
         condition: service_completed_successfully
+    restart: unless-stopped
+
+  worker:
+    <<: *backend
+    command: ["python", "-m", "app.worker"]
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    # порт метрик (WORKER_METRICS_PORT, по умолчанию 9100) наружу не публикуется
+    healthcheck:
+      test: ["CMD", "python", "-m", "app.worker.healthcheck"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
     restart: unless-stopped
 
   web:
