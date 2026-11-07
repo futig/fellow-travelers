@@ -17,9 +17,12 @@ def mini_app_link(param: str | None) -> str:
 
 def phone_keyboard() -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(
-        keyboard=[[KeyboardButton(text=texts.SHARE_PHONE_BUTTON, request_contact=True)]],
-        one_time_keyboard=True,
+        keyboard=[
+            [KeyboardButton(text=texts.SHARE_PHONE_BUTTON, request_contact=True, style="primary")]
+        ],
         resize_keyboard=True,
+        is_persistent=True,
+        input_field_placeholder=texts.PHONE_INPUT_PLACEHOLDER,
     )
 
 

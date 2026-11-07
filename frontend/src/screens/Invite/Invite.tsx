@@ -60,15 +60,14 @@ export function Invite() {
   const alreadyMember = preview?.already_member === true;
   const phoneRequired = isApiErrorCode(join.error, 'PHONE_REQUIRED');
 
-  // Профиль только читаем из кэша (его грузит PhoneGate): свой запрос не нужен.
+  // Профиль только читаем из кэша (если он уже загружен): свой запрос не нужен.
   const client = useQueryClient();
   const { data: me, dataUpdatedAt: meUpdatedAt } = useQuery({
     queryKey: meQueryKey,
     queryFn: fetchMe,
     enabled: false,
   });
-  // Опрашиваем /me напрямую и кладём в кэш только «телефон есть»: иначе PhoneGate закрыл бы экран,
-  // и вступление после появления телефона не повторилось бы.
+  // Опрашиваем /me напрямую и кладём в кэш только «телефон есть».
   const { sharing, share } = useShareContact(async () => {
     try {
       const fresh = await fetchMe();
