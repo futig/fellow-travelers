@@ -42,6 +42,8 @@ curl --connect-timeout 10 --max-time 20 \
 После попадания изменений в `main` запустить Deploy и проверить ответы бота в Telegram.
 До сборки образов workflow проверит `getMe` через Worker: он должен вернуть данные бота,
 соответствующего `BOT_TOKEN` проекта. Ошибка авторизации или другой бот остановит деплой.
+Проверка передаёт `User-Agent: fellow-travelers-relay-check/1.0`: стандартный
+`Python-urllib` блокируется Cloudflare на `workers.dev` с HTTP 403 и кодом 1010.
 Простое добавление GitHub Secrets без нового деплоя конфигурацию работающей ВМ не меняет.
 Для отключения relay удалить оба GitHub Secrets и повторить деплой.
 

@@ -38,7 +38,11 @@ def main() -> int:
     request = urllib.request.Request(
         f"{url}/botrelay/getMe",
         data=b"",
-        headers={"X-Transfer-Bot-Relay-Secret": secret},
+        headers={
+            "X-Transfer-Bot-Relay-Secret": secret,
+            # workers.dev блокирует стандартный Python-urllib с HTTP 403 / 1010.
+            "User-Agent": "fellow-travelers-relay-check/1.0",
+        },
     )
     try:
         with urllib.request.build_opener(NoRedirect()).open(
@@ -54,9 +58,18 @@ def main() -> int:
             print("::error::Telegram relay должен использовать BOT_TOKEN этого проекта")
             return 1
     except urllib.error.HTTPError as exc:
-        print(
-            f"::error::Telegram relay вернул HTTP {exc.code}; проверьте секреты Worker"
-        )
+        if exc.code == 403 and b"error code: 1010" in exc.read(4096):
+            print(
+                "::error::Cloudflare блокирует HTTP-клиент (1010); проверьте User-Agent"
+            )
+        elif exc.code == 401:
+            print(
+                "::error::Telegram relay: HTTP 401; проверьте RELAY_SHARED_SECRET и BOT_TOKEN Worker"
+            )
+        else:
+            print(
+                f"::error::Telegram relay вернул HTTP {exc.code}; проверьте Worker и upstream"
+            )
         return 1
     except (OSError, ValueError, KeyError, TypeError):
         print("::error::Telegram relay недоступен или вернул некорректный ответ")
