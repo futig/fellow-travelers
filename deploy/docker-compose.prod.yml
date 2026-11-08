@@ -37,6 +37,7 @@ services:
       BOT_USERNAME: "${BOT_USERNAME}"
       INIT_DATA_MAX_AGE_SECONDS: ${INIT_DATA_MAX_AGE_SECONDS}
       DEBUG: "${DEBUG}"
+      WEB_APP_URL: "${SITE_ADDRESS}"
     depends_on:
       - db
     restart: always
