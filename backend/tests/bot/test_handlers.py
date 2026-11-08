@@ -1,5 +1,6 @@
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from types import SimpleNamespace
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
@@ -12,6 +13,8 @@ from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import (
     Contact,
     InlineKeyboardMarkup,
+    MenuButtonDefault,
+    MenuButtonWebApp,
     ReplyKeyboardMarkup,
     ReplyKeyboardRemove,
 )
@@ -35,6 +38,14 @@ def _use_test_session(db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch)
     monkeypatch.setattr(handlers, "get_session_factory", lambda: session_cm)
 
 
+WEB_APP_URL = "https://app.example.com"
+
+
+@pytest.fixture(autouse=True)
+def _web_app_url(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(handlers, "get_settings", lambda: SimpleNamespace(web_app_url=WEB_APP_URL))
+
+
 @pytest.fixture
 def state() -> FSMContext:
     return FSMContext(
@@ -49,6 +60,9 @@ def make_message(*, user_id: int = TG_ID, contact: Contact | None = None) -> Mag
     sent = MagicMock()
     sent.delete = AsyncMock()
     message.sent = sent
+    message.chat.id = user_id
+    message.bot = MagicMock()
+    message.bot.set_chat_menu_button = AsyncMock()
     message.answer = AsyncMock(return_value=sent)
     return message
 
@@ -235,3 +249,79 @@ async def test_other_message_with_phone(db_session: AsyncSession, state: FSMCont
 def test_mini_app_link() -> None:
     assert mini_app_link(None) == "https://t.me/test_bot?startapp"
     assert mini_app_link("join_ABC123") == "https://t.me/test_bot?startapp=join_ABC123"
+
+
+async def test_contact_enables_menu_button(db_session: AsyncSession, state: FSMContext) -> None:
+    message = await share(state)
+    message.bot.set_chat_menu_button.assert_awaited_once()
+    kwargs = message.bot.set_chat_menu_button.call_args.kwargs
+    assert kwargs["chat_id"] == TG_ID
+    button = kwargs["menu_button"]
+    assert isinstance(button, MenuButtonWebApp)
+    assert button.text == texts.OPEN_APP_BUTTON
+    assert button.web_app.url == WEB_APP_URL
+
+
+async def test_start_with_phone_enables_menu_button(
+    db_session: AsyncSession, state: FSMContext
+) -> None:
+    await start(state)
+    await share(state)
+    message = await start(state)
+    message.bot.set_chat_menu_button.assert_awaited_once()
+    assert message.bot.set_chat_menu_button.call_args.kwargs["chat_id"] == TG_ID
+
+
+async def test_start_without_phone_resets_menu_button(
+    db_session: AsyncSession, state: FSMContext
+) -> None:
+    message = await start(state)
+    message.bot.set_chat_menu_button.assert_awaited_once()
+    kwargs = message.bot.set_chat_menu_button.call_args.kwargs
+    assert kwargs["chat_id"] == TG_ID
+    assert isinstance(kwargs["menu_button"], MenuButtonDefault)
+
+
+async def test_no_menu_button_without_web_app_url(
+    db_session: AsyncSession, state: FSMContext, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(handlers, "get_settings", lambda: SimpleNamespace(web_app_url=None))
+    message = await share(state)
+    message.bot.set_chat_menu_button.assert_not_awaited()
+    assert message.answer.await_count == 2
+
+
+async def test_menu_button_failure_does_not_break_onboarding(
+    db_session: AsyncSession, state: FSMContext
+) -> None:
+    message = make_message(
+        contact=Contact(phone_number="79991234567", first_name="А", user_id=TG_ID)
+    )
+    message.bot.set_chat_menu_button = AsyncMock(
+        side_effect=TelegramBadRequest(method=MagicMock(), message="bad request")
+    )
+    await handlers.on_contact(message, state)
+    assert message.answer.await_count == 2
+    assert message.answer.call_args.args[0] == texts.READY_NO_CODE
+    assert isinstance(last_markup(message), InlineKeyboardMarkup)
+
+
+async def test_other_without_phone_resets_menu_button(
+    db_session: AsyncSession, state: FSMContext
+) -> None:
+    message = make_message()
+    await handlers.on_other(message, state)
+    kwargs = message.bot.set_chat_menu_button.call_args.kwargs
+    assert kwargs["chat_id"] == TG_ID
+    assert isinstance(kwargs["menu_button"], MenuButtonDefault)
+
+
+async def test_other_with_phone_enables_menu_button(
+    db_session: AsyncSession, state: FSMContext
+) -> None:
+    await share(state)
+    message = make_message()
+    await handlers.on_other(message, state)
+    kwargs = message.bot.set_chat_menu_button.call_args.kwargs
+    assert kwargs["chat_id"] == TG_ID
+    assert isinstance(kwargs["menu_button"], MenuButtonWebApp)
