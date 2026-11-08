@@ -130,11 +130,8 @@ async def test_start_with_phone_shows_inline_buttons(
     markup = last_markup(message)
     assert message.answer.call_args.args[0] == texts.READY_NO_CODE
     assert isinstance(markup, InlineKeyboardMarkup)
-    assert inline_urls(markup) == [
-        "https://t.me/test_bot?startapp",
-        "https://t.me/test_bot?startapp=admin",
-    ]
-    assert inline_texts(markup) == [texts.OPEN_APP_BUTTON, texts.ADMIN_BUTTON]
+    assert inline_urls(markup) == ["https://t.me/test_bot?startapp=admin"]
+    assert inline_texts(markup) == [texts.ADMIN_BUTTON]
 
 
 async def test_start_with_phone_and_join_code_shows_join_button(
@@ -148,11 +145,8 @@ async def test_start_with_phone_and_join_code_shows_join_button(
         "Готово, теперь можно перейти к данным о рейсе, чтобы найти попутчиков"
     )
     assert isinstance(markup, InlineKeyboardMarkup)
-    assert inline_texts(markup) == [texts.JOIN_BUTTON, texts.ADMIN_BUTTON]
-    assert inline_urls(markup) == [
-        "https://t.me/test_bot?startapp=join_ABC123",
-        "https://t.me/test_bot?startapp=admin",
-    ]
+    assert inline_texts(markup) == [texts.JOIN_BUTTON]
+    assert inline_urls(markup) == ["https://t.me/test_bot?startapp=join_ABC123"]
 
 
 async def test_join_payload_survives_contact(db_session: AsyncSession, state: FSMContext) -> None:
@@ -191,8 +185,8 @@ async def test_plain_start_forgets_previous_invite(
     await start(state, "join_ABC123")
     await share(state)
     message = await start(state)
-    assert inline_urls(last_markup(message))[0] == mini_app_link(None)
-    assert inline_texts(last_markup(message))[0] == texts.OPEN_APP_BUTTON
+    assert inline_urls(last_markup(message)) == [mini_app_link("admin")]
+    assert inline_texts(last_markup(message)) == [texts.ADMIN_BUTTON]
 
 
 @pytest.mark.parametrize("payload", ["join_AB", "join_ABC1234", "join_AB-123", "admin", "x"])
@@ -201,8 +195,8 @@ async def test_invalid_payload_ignored(
 ) -> None:
     await start(state, payload)
     answer = await share(state)
-    assert inline_urls(last_markup(answer))[0] == mini_app_link(None)
-    assert inline_texts(last_markup(answer))[0] == texts.OPEN_APP_BUTTON
+    assert inline_urls(last_markup(answer)) == [mini_app_link("admin")]
+    assert inline_texts(last_markup(answer)) == [texts.ADMIN_BUTTON]
 
 
 async def test_foreign_contact_rejected(db_session: AsyncSession, state: FSMContext) -> None:
