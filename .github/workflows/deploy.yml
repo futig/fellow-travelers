@@ -50,6 +50,13 @@ jobs:
               exit 1 ;;
           esac
 
+      - name: Проверить Telegram relay
+        env:
+          TELEGRAM_RELAY_URL: ${{ secrets.TELEGRAM_RELAY_URL }}
+          TELEGRAM_RELAY_SECRET: ${{ secrets.TELEGRAM_RELAY_SECRET }}
+          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+        run: python3 .github/scripts/check-telegram-relay.py
+
       - name: Проверить Caddyfile
         run: |
           docker run --rm -v "$PWD/deploy/caddy:/etc/caddy:ro" \
@@ -113,6 +120,8 @@ jobs:
           CADDY_IMAGE: cr.yandex/${{ secrets.YC_REGISTRY_ID }}/caddy:${{ github.sha }}
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
           BOT_USERNAME: ${{ secrets.BOT_USERNAME }}
+          TELEGRAM_RELAY_URL: ${{ secrets.TELEGRAM_RELAY_URL }}
+          TELEGRAM_RELAY_SECRET: ${{ secrets.TELEGRAM_RELAY_SECRET }}
           POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
           SITE_ADDRESS: ${{ secrets.SITE_ADDRESS }}
           ACME_EMAIL: ${{ secrets.ACME_EMAIL }}
@@ -122,6 +131,7 @@ jobs:
         run: |
           # список переменных явный: $$(date +%u) в сервисе backup подставлять нельзя
           envsubst '${API_IMAGE} ${WEB_IMAGE} ${CADDY_IMAGE} ${BOT_TOKEN} ${BOT_USERNAME}
+                    ${TELEGRAM_RELAY_URL} ${TELEGRAM_RELAY_SECRET}
                     ${POSTGRES_PASSWORD} ${SITE_ADDRESS} ${ACME_EMAIL} ${ACME_CA}
                     ${INIT_DATA_MAX_AGE_SECONDS} ${DEBUG}' \
             < deploy/docker-compose.prod.yml > "$RUNNER_TEMP/spec.yml"
