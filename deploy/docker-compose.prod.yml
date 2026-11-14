@@ -23,6 +23,8 @@ services:
       BOT_USERNAME: "${BOT_USERNAME}"
       INIT_DATA_MAX_AGE_SECONDS: ${INIT_DATA_MAX_AGE_SECONDS}
       DEBUG: "${DEBUG}"
+      LOG_LEVEL: "${LOG_LEVEL:-INFO}"
+      WORKER_METRICS_PORT: "${WORKER_METRICS_PORT:-9100}"
     depends_on:
       - db
     restart: always
@@ -37,6 +39,7 @@ services:
       BOT_USERNAME: "${BOT_USERNAME}"
       INIT_DATA_MAX_AGE_SECONDS: ${INIT_DATA_MAX_AGE_SECONDS}
       DEBUG: "${DEBUG}"
+      LOG_LEVEL: "${LOG_LEVEL:-INFO}"
     depends_on:
       - db
     restart: always
@@ -51,6 +54,8 @@ services:
       BOT_USERNAME: "${BOT_USERNAME}"
       INIT_DATA_MAX_AGE_SECONDS: ${INIT_DATA_MAX_AGE_SECONDS}
       DEBUG: "${DEBUG}"
+      LOG_LEVEL: "${LOG_LEVEL:-INFO}"
+      WORKER_METRICS_PORT: "${WORKER_METRICS_PORT:-9100}"
     depends_on:
       - db
     # метрики воркера на порту 9100 доступны только внутри сети compose

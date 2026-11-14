@@ -66,6 +66,35 @@ def test_worker_has_healthcheck_and_no_published_ports(path: Path) -> None:
     }
 
 
+@pytest.mark.parametrize(
+    ("path", "service", "with_metrics_port"),
+    [
+        (DEV_COMPOSE, "api", True),
+        (DEV_COMPOSE, "worker", True),
+        (DEV_COMPOSE, "bot", True),
+        (PROD_COMPOSE, "api", True),
+        (PROD_COMPOSE, "worker", True),
+        (PROD_COMPOSE, "bot", False),
+    ],
+    ids=["dev-api", "dev-worker", "dev-bot", "prod-api", "prod-worker", "prod-bot"],
+)
+def test_log_level_and_worker_metrics_port_reach_container_environment(
+    path: Path, service: str, with_metrics_port: bool
+) -> None:
+    compose: dict[str, Any] = yaml.safe_load(path.read_text(encoding="utf-8"))
+
+    environment = compose["services"][service]["environment"]
+
+    # без проводки в environment контейнера их установка в .env на сервере ничего не делает;
+    # дефолты (`INFO`, `9100`) повторяют дефолты Settings в app/config.py
+    assert environment["LOG_LEVEL"] == "${LOG_LEVEL:-INFO}"
+    if with_metrics_port:
+        assert environment["WORKER_METRICS_PORT"] == "${WORKER_METRICS_PORT:-9100}"
+    else:
+        # у бота нет metrics-сервера: WORKER_METRICS_PORT ему не нужен
+        assert "WORKER_METRICS_PORT" not in environment
+
+
 # ---------------------------------------------------------------- Dockerfile, образы, пакеты
 
 

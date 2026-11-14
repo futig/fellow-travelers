@@ -6,6 +6,8 @@ x-backend-env: &backend-env
   BOT_USERNAME: ${BOT_USERNAME:-}
   INIT_DATA_MAX_AGE_SECONDS: ${INIT_DATA_MAX_AGE_SECONDS:-86400}
   DEBUG: ${DEBUG:-false}
+  LOG_LEVEL: ${LOG_LEVEL:-INFO}
+  WORKER_METRICS_PORT: ${WORKER_METRICS_PORT:-9100}
 
 x-backend: &backend
   build:
