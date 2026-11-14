@@ -116,6 +116,23 @@ async def test_request_id_does_not_leak_into_next_context(
     assert context.request_id.get() is None
 
 
+async def test_request_id_does_not_leak_after_unhandled_exception(
+    probe_app: FastAPI, client: AsyncClient, json_logs: JsonLogs
+) -> None:
+    # ASGITransport выполняет оба запроса в одной asyncio-задаче, то есть в общем контексте:
+    # падение первого запроса не должно оставлять в нём свой (подставленный клиентом) request_id
+    await client.get("/boom", headers={REQUEST_ID_HEADER: VALID_ID})
+
+    response = await client.get("/probe/x")
+    fresh = response.json()["request_id"]
+
+    assert UUID_HEX.fullmatch(fresh)
+    assert fresh != VALID_ID
+    [probe_log] = [r for r in json_logs.by_logger("app.access") if r["route"] == "/probe/{item_id}"]
+    assert probe_log["request_id"] == fresh
+    assert context.request_id.get() is None
+
+
 async def test_error_response_keeps_request_id_header(
     probe_app: FastAPI, client: AsyncClient
 ) -> None:
@@ -284,7 +301,9 @@ async def test_unhandled_exception_is_counted_as_500_and_propagated(
     [unhandled] = json_logs.by_logger("app.errors")
     assert unhandled["message"] == "Unhandled exception"
     assert unhandled["exc_type"] == "RuntimeError"
-    assert unhandled["request_id"] == VALID_ID
+    # токен сбрасывается в finally до того, как ServerErrorMiddleware (снаружи middleware)
+    # логирует исключение, поэтому request_id живёт только внутри обработки запроса
+    assert "request_id" not in unhandled
 
 
 async def test_exception_propagates_out_of_middleware() -> None:

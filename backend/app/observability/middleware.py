@@ -1,7 +1,9 @@
 """ASGI middleware: request_id, метрики и строка access-лога на каждый запрос.
 
 Чистый ASGI, не `BaseHTTPMiddleware`: приложение работает в той же задаче, поэтому `request_id`
-в `ContextVar` виден обработчикам и логам, а ответ не буферизуется.
+в `ContextVar` виден обработчикам и логам, а ответ не буферизуется. Токен `request_id` сбрасывается
+в `finally` на любом исходе запроса: значение не переживает запрос и не протекает в следующие
+запросы той же asyncio-задачи.
 """
 
 import logging
@@ -78,13 +80,19 @@ class ObservabilityMiddleware:
             await self.app(scope, receive, send_with_request_id)
         except Exception:
             self._finish(scope, 500, started)
-            # request_id остаётся в контексте намеренно: «Unhandled exception» пишет обработчик
-            # ServerErrorMiddleware, который стоит снаружи и вызывается уже после нашего выхода.
-            # Задача на запрос у сервера своя, поэтому значение дальше не утекает.
             raise
-        if status is not None:
-            self._finish(scope, status, started)
-        context.request_id.reset(token)
+        else:
+            if status is not None:
+                self._finish(scope, status, started)
+        finally:
+            # Сбрасываем токен на любом исходе, включая необработанное исключение: значение
+            # не должно доживать до следующего запроса той же asyncio-задачи (ASGITransport
+            # в тестах переиспользует задачу, и без сброса туда протекал бы чужой request_id —
+            # в том числе подставленный клиентом через X-Request-ID). «Unhandled exception»
+            # пишет обработчик ServerErrorMiddleware, который стоит снаружи и вызывается уже
+            # после сброса, поэтому в его записи request_id нет; запрос остаётся опознаваем
+            # по access-строке со статусом 500.
+            context.request_id.reset(token)
 
     @staticmethod
     def _finish(scope: Scope, status: int, started: float) -> None:
