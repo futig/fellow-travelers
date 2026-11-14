@@ -57,6 +57,28 @@ jobs:
             echo "frontend=$frontend"
             echo "caddy=$caddy"
           } >> "$GITHUB_OUTPUT"
+      - name: Вывести результат
+        if: always()
+        env:
+          BACKEND_CHANGED: ${{ steps.filter.outputs.backend }}
+          FRONTEND_CHANGED: ${{ steps.filter.outputs.frontend }}
+          CADDY_CHANGED: ${{ steps.filter.outputs.caddy }}
+        run: |
+          backend=Нет
+          frontend=Нет
+          caddy=Нет
+          if [ "$BACKEND_CHANGED" = "true" ]; then backend=Да; fi
+          if [ "$FRONTEND_CHANGED" = "true" ]; then frontend=Да; fi
+          if [ "$CADDY_CHANGED" = "true" ]; then caddy=Да; fi
+          {
+            echo '## Необходимость сборки'
+            echo
+            echo '| Компонент | Нужна сборка |'
+            echo '| --- | --- |'
+            echo "| api и bot | $backend |"
+            echo "| web | $frontend |"
+            echo "| caddy | $caddy |"
+          } >> "$GITHUB_STEP_SUMMARY"
 
   deploy:
     needs: [tests, changes]
@@ -119,7 +141,8 @@ jobs:
           echo "IAM_TOKEN=$token" >> "$GITHUB_ENV"
           printf '%s' "$token" | docker login --username iam --password-stdin cr.yandex
 
-      - name: Образ бэкенда (api и bot)
+      - id: build_backend
+        name: Образ бэкенда (api и bot)
         if: needs.changes.outputs.backend == 'true'
         uses: docker/build-push-action@v6
         with:
@@ -134,7 +157,8 @@ jobs:
           cache-from: type=gha,scope=api
           cache-to: type=gha,mode=max,scope=api
 
-      - name: Образ мини-приложения
+      - id: build_web
+        name: Образ мини-приложения
         if: needs.changes.outputs.frontend == 'true'
         uses: docker/build-push-action@v6
         with:
@@ -149,7 +173,8 @@ jobs:
           cache-from: type=gha,scope=web
           cache-to: type=gha,mode=max,scope=web
 
-      - name: Образ Caddy
+      - id: build_caddy
+        name: Образ Caddy
         if: needs.changes.outputs.caddy == 'true'
         uses: docker/build-push-action@v6
         with:
@@ -187,7 +212,8 @@ jobs:
             < deploy/docker-compose.prod.yml > "$RUNNER_TEMP/spec.yml"
           docker compose -f "$RUNNER_TEMP/spec.yml" config --quiet
 
-      - name: Обновить контейнеры на ВМ
+      - id: update_coi
+        name: Обновить контейнеры на ВМ
         env:
           YC_VM_ID: ${{ secrets.YC_VM_ID }}
         run: |
@@ -212,7 +238,8 @@ jobs:
           done
           echo "::error::операция не завершилась за 150 секунд"; exit 1
 
-      - name: Проверить, что сайт отвечает
+      - id: healthcheck
+        name: Проверить, что сайт отвечает
         continue-on-error: true
         env:
           YC_VM_ID: ${{ secrets.YC_VM_ID }}
@@ -229,3 +256,36 @@ jobs:
             sleep 10
           done
           echo "::warning::сайт не ответил за 5 минут"
+
+      - name: Вывести результат
+        if: always()
+        env:
+          BACKEND_CHANGED: ${{ needs.changes.outputs.backend }}
+          FRONTEND_CHANGED: ${{ needs.changes.outputs.frontend }}
+          CADDY_CHANGED: ${{ needs.changes.outputs.caddy }}
+          BACKEND_BUILD_OUTCOME: ${{ steps.build_backend.outcome }}
+          WEB_BUILD_OUTCOME: ${{ steps.build_web.outcome }}
+          CADDY_BUILD_OUTCOME: ${{ steps.build_caddy.outcome }}
+          COI_UPDATE_OUTCOME: ${{ steps.update_coi.outcome }}
+          HEALTHCHECK_OUTCOME: ${{ steps.healthcheck.outcome }}
+        run: |
+          backend_changed=Нет
+          frontend_changed=Нет
+          caddy_changed=Нет
+          if [ "$BACKEND_CHANGED" = "true" ]; then backend_changed=Да; fi
+          if [ "$FRONTEND_CHANGED" = "true" ]; then frontend_changed=Да; fi
+          if [ "$CADDY_CHANGED" = "true" ]; then caddy_changed=Да; fi
+          {
+            echo '## Результат развёртывания'
+            echo
+            echo '| Компонент | Изменён | Результат сборки |'
+            echo '| --- | --- | --- |'
+            echo "| api и bot | $backend_changed | $BACKEND_BUILD_OUTCOME |"
+            echo "| web | $frontend_changed | $WEB_BUILD_OUTCOME |"
+            echo "| caddy | $caddy_changed | $CADDY_BUILD_OUTCOME |"
+            echo
+            echo '| Этап | Результат |'
+            echo '| --- | --- |'
+            echo "| Обновление COI | $COI_UPDATE_OUTCOME |"
+            echo "| Healthcheck | $HEALTHCHECK_OUTCOME |"
+          } >> "$GITHUB_STEP_SUMMARY"
