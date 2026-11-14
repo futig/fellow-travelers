@@ -53,6 +53,11 @@ def _sort_key(c: MatchCandidate) -> tuple[datetime, UUID]:
 def _group_rank(
     group: Sequence[MatchCandidate],
 ) -> tuple[int, timedelta, timedelta, tuple[UUID, ...]]:
+    """Базовый ранг машины: больше пассажиров, меньше разброс, меньше сумма ожиданий, id.
+
+    Общая основа ранжирования для find_group и _placement_rank: любое изменение
+    tie-break делается здесь одним местом.
+    """
     arrivals = [c.arrival_at for c in group]
     latest = max(arrivals)
     return (
@@ -110,15 +115,8 @@ _PlacementRank = tuple[int, int, timedelta, timedelta, tuple[UUID, ...]]
 
 def _placement_rank(car: Sequence[MatchCandidate], placed: int) -> _PlacementRank:
     """Ранг варианта по итоговой машине `car`; `placed` — сколько заявок размещает решение."""
-    arrivals = [c.arrival_at for c in car]
-    latest = max(arrivals)
-    return (
-        -sum(c.passengers for c in car),
-        -placed,
-        latest - min(arrivals),
-        sum((latest - t for t in arrivals), timedelta(0)),
-        tuple(sorted(c.id for c in car)),
-    )
+    neg_pax, spread, wait, ids = _group_rank(car)
+    return (neg_pax, -placed, spread, wait, ids)
 
 
 def find_placement(
