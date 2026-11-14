@@ -21,6 +21,23 @@ MAX_ATTEMPTS = 8
 _RETRY_BASE_SECONDS = 5
 _RETRY_MAX_SECONDS = 900
 _LAST_ERROR_LENGTH = 128
+# пауза в памяти воркера, если не удалось даже записать ошибку задания: `retry_delay(0)`
+_PAUSE_AFTER_DOUBLE_FAILURE_SECONDS = _RETRY_BASE_SECONDS
+
+# job_id -> момент (time.monotonic()), до которого воркер не берёт задание: память процесса,
+# пережить рестарт не должна — после рестарта задание просто берётся снова
+_paused_until: dict[uuid.UUID, float] = {}
+
+
+def _paused(job_id: uuid.UUID) -> bool:
+    """На паузе ли задание после двойного сбоя — упали и обработка, и запись ошибки."""
+    deadline = _paused_until.get(job_id)
+    if deadline is None:
+        return False
+    if time.monotonic() < deadline:
+        return True
+    del _paused_until[job_id]
+    return False
 
 
 class JobOutcome(StrEnum):
@@ -48,15 +65,16 @@ async def enqueue_reconcile(
     Вызывать под `lock_event` группы, в транзакции правки: откатилась правка — нет и задания,
     прошёл commit — задание не потеряется. Ожидающее задание на группу одно (уникальный частичный
     индекс): если оно уже есть, `ON CONFLICT DO NOTHING` ничего не делает, и новая правка сливается
-    с ним. Пересчёт читает состояние группы после блокировки, поэтому видит и эту правку.
+    с ним. После вставки `trip_id` задания обновляется на самую свежую правку: записи истории
+    исключений (`transfer_left.trip_id`) и tie-break при исключении указывают на правку-причину.
+    Пересчёт в любом случае читает состояние группы после блокировки, поэтому видит обе правки.
 
-    Ограничение слияния: `trip_id` остаётся от первой правки. Пересчёт всё равно проверяет все
-    активные трансферы группы, от `trip_id` зависят только tie-break при исключении и `trip_id` в
-    записях истории.
-
-    DO NOTHING, а не DO UPDATE: воркер держит строку задания `FOR UPDATE` и ждёт `lock_event`,
-    который держит производитель, и UPDATE этой строки дал бы взаимную блокировку. DO NOTHING на
-    блокировку строки не ждёт. Задание в статусе `failed` новому не мешает.
+    Вставка — DO NOTHING, а не DO UPDATE: воркер держит строку задания `FOR UPDATE` и ждёт
+    `lock_event`, который держит производитель, и UPDATE этой строки дал бы взаимную блокировку.
+    DO NOTHING на блокировку строки не ждёт, поэтому и обновление `trip_id` идёт отдельным
+    UPDATE с `FOR UPDATE SKIP LOCKED` в подзапросе: строку, взятую воркером, пропускаем — такой
+    воркер вот-вот пересчитает группу со старым `trip_id` (и правку, и состав он видит верные,
+    устаревает только атрибуция истории). Задание в статусе `failed` новому не мешает.
     """
     await session.execute(
         insert(BackgroundJob)
@@ -67,6 +85,22 @@ async def enqueue_reconcile(
             index_where=text(f"status = '{JobStatus.PENDING.value}'"),
         )
     )
+    await session.execute(
+        update(BackgroundJob)
+        .values(trip_id=trip_id)
+        .where(
+            BackgroundJob.id.in_(
+                select(BackgroundJob.id)
+                .where(
+                    BackgroundJob.event_id == event_id,
+                    BackgroundJob.kind == JobKind.RECONCILE_TRIP,
+                    BackgroundJob.status == JobStatus.PENDING,
+                )
+                .with_for_update(skip_locked=True)
+            )
+        )
+        .execution_options(synchronize_session=False)
+    )
 
 
 def _observe_attempt(kind: str, outcome: JobOutcome, started: float) -> None:
@@ -76,10 +110,23 @@ def _observe_attempt(kind: str, outcome: JobOutcome, started: float) -> None:
 
 
 async def _register_failure(
-    session: AsyncSession, job: BackgroundJob, exc: Exception, started: float
-) -> JobOutcome:
-    """Учитывает неудачную попытку: счётчик, пауза до повтора или `failed`; пишет лог и commit."""
-    attempts = job.attempts + 1
+    session_factory: async_sessionmaker[AsyncSession],
+    *,
+    job_id: uuid.UUID,
+    kind: str,
+    attempts: int,
+    exc: Exception,
+    started: float,
+) -> JobOutcome | None:
+    """Учитывает неудачную попытку: счётчик, пауза до повтора или `failed`; лог и commit.
+
+    Отдельная короткая транзакция на новой сессии: сессия с упавшим пересчётом уже закрыта, и её
+    возможная порча (например, разрыв соединения) учёту не мешает. Если не удалось и это, счётчик
+    и пауза в БД не записаны — остаётся только пауза в памяти воркера (`_paused`), чтобы он не
+    забирал то же задание снова на каждом опросе без экспоненциальной задержки; `None` просит
+    цикл пропустить тик.
+    """
+    attempts += 1
     values: dict[str, object] = {
         "attempts": attempts,
         "last_error": type(exc).__name__[:_LAST_ERROR_LENGTH],
@@ -88,34 +135,62 @@ async def _register_failure(
     if outcome == JobOutcome.FAILED:
         values["status"] = JobStatus.FAILED
     else:
-        # clock_timestamp(), а не now(): now() — начало транзакции, то есть момент забора задания,
-        # и долгий пересчёт, упавший позже задержки, получил бы повтор сразу, без паузы
+        # clock_timestamp(), а не now(): пауза считается от момента записи ошибки, а не от
+        # начала транзакции регистрации, которая стартует позже самой ошибки
         values["run_after"] = func.clock_timestamp(type_=DateTime(timezone=True)) + retry_delay(
-            job.attempts
+            attempts - 1
         )
-    kind, job_id = job.kind.value, job.id
-    await session.execute(update(BackgroundJob).where(BackgroundJob.id == job_id).values(**values))
-    await session.commit()
-    _observe_attempt(kind, outcome, started)
-    # текст исключения может содержать персональные данные (значения строк в ошибках БД), поэтому
-    # в сообщение он не попадает, а форматтер JSON-логов пишет в traceback только кадры стека
-    extra = {"kind": kind, "outcome": outcome.value, "attempts": attempts}
-    if outcome == JobOutcome.FAILED:
-        logger.error("Задание не выполнено, повторов больше нет", extra=extra, exc_info=exc)
-    else:
-        logger.warning("Задание не выполнено, будет повтор", extra=extra, exc_info=exc)
-    return outcome
+    token = context.job_id.set(job_id)
+    try:
+        try:
+            async with session_factory() as session:
+                await session.execute(
+                    update(BackgroundJob).where(BackgroundJob.id == job_id).values(**values)
+                )
+                await session.commit()
+        except Exception as register_exc:
+            # двойной сбой: упал и пересчёт, и запись ошибки. В БД ничего не изменилось, поэтому
+            # пауза до повтора держится в памяти процесса (пережить рестарт воркера она не должна)
+            _paused_until[job_id] = time.monotonic() + _PAUSE_AFTER_DOUBLE_FAILURE_SECONDS
+            # в логе — traceback исходной ошибки пересчёта, класс ошибки записи в сообщении:
+            # имена классов безопасны, тексты могут содержать персональные данные
+            logger.error(
+                "Не удалось записать ошибку задания (%s): пауза до повтора без записи в БД",
+                type(register_exc).__name__,
+                extra={"kind": kind, "attempts": attempts},
+                exc_info=exc,
+            )
+            return None
+        _observe_attempt(kind, outcome, started)
+        # текст исключения может содержать персональные данные (значения строк в ошибках БД),
+        # поэтому в сообщение он не попадает, а форматтер JSON-логов пишет в traceback только
+        # кадры стека
+        extra = {"kind": kind, "outcome": outcome.value, "attempts": attempts}
+        if outcome == JobOutcome.FAILED:
+            logger.error("Задание не выполнено, повторов больше нет", extra=extra, exc_info=exc)
+        else:
+            logger.warning("Задание не выполнено, будет повтор", extra=extra, exc_info=exc)
+        return outcome
+    finally:
+        context.job_id.reset(token)
 
 
 async def process_next(session_factory: async_sessionmaker[AsyncSession]) -> JobOutcome | None:
-    """Забирает одно готовое задание и выполняет его в одной транзакции; None, если заданий нет.
+    """Забирает одно готовое задание и выполняет его в одной транзакции.
 
-    Задание блокируется `FOR UPDATE SKIP LOCKED`, поэтому несколько воркеров делят очередь, не
-    ожидая друг друга. Пересчёт идёт внутри savepoint, под `lock_event` группы. Успех удаляет
-    задание в той же транзакции: повторная доставка ничего не меняет. Ошибка откатывает только
-    пересчёт: `attempts` растёт, `run_after` сдвигается на `retry_delay`, в `last_error`
-    пишется имя класса исключения (текст может содержать персональные данные). После
-    `MAX_ATTEMPTS` попыток задание получает `failed` и больше не берётся.
+    Возвращает `None`, если готовых заданий нет либо первое стоит на внутрипроцессной паузе
+    после двойного сбоя (задание не берётся, но цикл воркера делает обычную паузу между
+    опросами). Задание блокируется `FOR UPDATE SKIP LOCKED`, поэтому несколько воркеров делят
+    очередь, не ожидая друг друга. Пересчёт идёт внутри savepoint, под `lock_event` группы.
+    Успех удаляет задание в той же транзакции: повторная доставка ничего не меняет. Ошибка
+    откатывает только пересчёт: `attempts` растёт, `run_after` сдвигается на `retry_delay`,
+    в `last_error` пишется имя класса исключения (текст может содержать персональные данные).
+    После `MAX_ATTEMPTS` попыток задание получает `failed` и больше не берётся.
+
+    Учитывает ошибку `_register_failure` на отдельной короткой транзакции: сессия с пересчётом
+    к этому моменту закрыта (строка задания отпущена), и сбой пересчёта не мешает записать
+    попытку. Если не удалась и запись — задание остаётся нетронутым, воркер держит его id
+    в памяти и пропускает, пока действует `_paused`.
     """
     async with session_factory() as session:
         job = (
@@ -130,10 +205,10 @@ async def process_next(session_factory: async_sessionmaker[AsyncSession]) -> Job
                 .with_for_update(skip_locked=True)
             )
         ).scalar_one_or_none()
-        if job is None:
+        if job is None or _paused(job.id):
             return None
         started = time.perf_counter()
-        job_id, kind = job.id, job.kind.value
+        job_id, kind, attempts = job.id, job.kind.value, job.attempts
         token = context.job_id.set(job_id)
         try:
             try:
@@ -147,21 +222,31 @@ async def process_next(session_factory: async_sessionmaker[AsyncSession]) -> Job
                         ),
                     )
             except Exception as exc:
-                return await _register_failure(session, job, exc, started)
-            await session.execute(delete(BackgroundJob).where(BackgroundJob.id == job_id))
-            await session.commit()
-            _observe_attempt(kind, JobOutcome.DONE, started)
-            logger.info(
-                "Пересчёт трансферов выполнен: исключено заявок %d, расформировано трансферов %d,"
-                " размещено заявок %d",
-                result.excluded,
-                result.dissolved,
-                result.placed,
-                extra={"kind": kind, "outcome": JobOutcome.DONE.value},
-            )
-            return JobOutcome.DONE
+                exc_to_register = exc
+            else:
+                await session.execute(delete(BackgroundJob).where(BackgroundJob.id == job_id))
+                await session.commit()
+                _observe_attempt(kind, JobOutcome.DONE, started)
+                logger.info(
+                    "Пересчёт трансферов выполнен: исключено заявок %d, расформировано трансферов"
+                    " %d, размещено заявок %d",
+                    result.excluded,
+                    result.dissolved,
+                    result.placed,
+                    extra={"kind": kind, "outcome": JobOutcome.DONE.value},
+                )
+                return JobOutcome.DONE
         finally:
             context.job_id.reset(token)
+    # сессия с пересчётом закрыта: строка задания отпущена, регистрация не заблокируется на ней
+    return await _register_failure(
+        session_factory,
+        job_id=job_id,
+        kind=kind,
+        attempts=attempts,
+        exc=exc_to_register,
+        started=started,
+    )
 
 
 async def observe_queue(session_factory: async_sessionmaker[AsyncSession]) -> None:

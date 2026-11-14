@@ -6,8 +6,10 @@
 """
 
 import logging
+import time
 import uuid
 from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -44,6 +46,10 @@ SECRET = "+79991234567 Ivan Ivanov"
 
 
 class BoomError(Exception):
+    pass
+
+
+class LostCommitError(Exception):
     pass
 
 
@@ -87,7 +93,7 @@ async def test_second_enqueue_merges_into_the_pending_job(db_session: AsyncSessi
     await enqueue_reconcile(db_session, event_id=event.id, trip_id=second_trip)
 
     (job,) = await jobs_of(db_session, event.id)
-    assert job.trip_id == first_trip  # при слиянии trip_id остаётся от первой правки
+    assert job.trip_id == second_trip  # при слиянии trip_id уходит к последней правке
 
 
 async def test_enqueue_in_other_group_is_not_merged(db_session: AsyncSession) -> None:
@@ -191,6 +197,31 @@ async def test_success_applies_reconcile_and_deletes_job(
         "Пересчёт трансферов выполнен: исключено заявок 1, расформировано трансферов 1,"
         " размещено заявок 0"
     )
+
+
+async def test_merged_job_attributes_exclusions_to_the_latest_edit(
+    db_session: AsyncSession,
+) -> None:
+    """Склейка правок: исключение приписывается последней правке, а не первой.
+
+    Первая правка безобидна (в пределах ожидания), вторая делает пару несовместимой: причина
+    выхода — она, поэтому `trip_id` в записях истории исключений должен указывать на второй рейс.
+    """
+    event_id, first, second, second_trip = await _pair(db_session)
+    await enqueue_reconcile(db_session, event_id=event_id, trip_id=first.trip_id)
+    second_trip.estimated_arrival = BASE + timedelta(minutes=30)  # ожидание 15 минут
+    await db_session.flush()
+    await enqueue_reconcile(db_session, event_id=event_id, trip_id=second_trip.id)
+
+    (job,) = await jobs_of(db_session, event_id)
+    assert job.trip_id == second_trip.id
+
+    assert await process_next(shared_session_factory(db_session)) == JobOutcome.DONE
+
+    rows = await audit_rows(db_session, event_id)
+    (excluded,) = [row for row in rows if row.reason == "incompatible_after_change"]
+    assert (excluded.application_id, excluded.trip_id) == (second.id, second_trip.id)
+    await assert_history_matches_transfers(db_session, event_id)
 
 
 async def test_success_without_changes_deletes_job_and_writes_nothing(
@@ -431,3 +462,92 @@ async def test_retry_pause_counts_from_the_error_not_from_job_pick_up(
     run_after = (await _fresh_job(db_session, job_id)).run_after
     assert run_after >= failed_at[0] + retry_delay(0)
     assert run_after < failed_at[0] + retry_delay(0) + timedelta(seconds=5)
+
+
+async def test_double_failure_keeps_job_and_skips_the_tick(
+    db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Двойной сбой (пересчёт и запись ошибки): задание не тронуто, опросы пропускаются.
+
+    Регистрацию ошибки сымитировать коммитом: `commit` любой сессии падает, как при потере
+    соединения. В БД ничего не меняется, воркер держит паузу в памяти и не берёт то же задание
+    на каждом опросе; когда пауза кончилась, задание берётся снова.
+    """
+    job = await make_job(db_session)
+    job_id = job.id
+    factory = shared_session_factory(db_session)
+    monkeypatch.setattr(jobs_service, "_paused_until", {})
+    caplog.set_level(logging.ERROR)
+
+    async def fail(*args: Any, **kwargs: Any) -> ReconcileResult:
+        raise BoomError(SECRET)
+
+    async def lost_commit(self: AsyncSession) -> None:
+        raise LostCommitError()
+
+    monkeypatch.setattr(jobs_service, "reconcile_event", fail)
+    with pytest.MonkeyPatch.context() as broken_commit:
+        broken_commit.setattr(AsyncSession, "commit", lost_commit)
+
+        assert await process_next(factory) is None  # тик пропущен: записать ошибку не удалось
+        stored = await _fresh_job(db_session, job_id)
+        assert (stored.status, stored.attempts, stored.last_error) == (
+            JobStatus.PENDING,
+            0,
+            None,
+        )
+
+        # пауза в памяти: следующие опросы задание не берут
+        assert await process_next(factory) is None
+
+    # пауза кончилась: задание снова берётся, и теперь регистрация ошибки проходит
+    real_monotonic = time.monotonic
+    monkeypatch.setattr(
+        jobs_service,
+        "time",
+        SimpleNamespace(monotonic=lambda: real_monotonic() + 60, perf_counter=time.perf_counter),
+    )
+    assert await process_next(factory) == JobOutcome.RETRY
+    assert (await _fresh_job(db_session, job_id)).attempts == 1
+
+    (record,) = [
+        r for r in caplog.records if r.name == jobs_service.__name__ and r.levelno == logging.ERROR
+    ]
+    assert "LostCommitError" in record.getMessage()
+    assert SECRET not in record.getMessage()  # и в traceback не попадает: только кадры стека
+    assert context.job_id.get() is None
+
+
+async def test_pause_after_double_failure_expires_with_retry_delay(
+    db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Пауза в памяти после двойного сбоя — `retry_delay(0)`, как у обычного повтора в БД."""
+    job = await make_job(db_session)
+    job_id = job.id
+    factory = shared_session_factory(db_session)
+    monkeypatch.setattr(jobs_service, "_paused_until", {})
+
+    async def fail(*args: Any, **kwargs: Any) -> ReconcileResult:
+        raise BoomError(SECRET)
+
+    async def lost_commit(self: AsyncSession) -> None:
+        raise LostCommitError()
+
+    def shifted_time(shift: float) -> SimpleNamespace:
+        real = time.monotonic
+        return SimpleNamespace(monotonic=lambda: real() + shift, perf_counter=time.perf_counter)
+
+    monkeypatch.setattr(jobs_service, "reconcile_event", fail)
+    with pytest.MonkeyPatch.context() as broken_commit:
+        broken_commit.setattr(AsyncSession, "commit", lost_commit)
+        assert await process_next(factory) is None
+
+        # чуть меньше паузы — задание ещё не берётся
+        monkeypatch.setattr(jobs_service, "time", shifted_time(retry_delay(0).total_seconds() - 1))
+        assert await process_next(factory) is None
+
+        # чуть больше — уже берётся
+        monkeypatch.setattr(jobs_service, "time", shifted_time(retry_delay(0).total_seconds() + 1))
+        assert await process_next(factory) is None  # commit снова сломан, но задание взято
+
+    assert (await _fresh_job(db_session, job_id)).attempts == 0  # регистрация всё ещё не удалась

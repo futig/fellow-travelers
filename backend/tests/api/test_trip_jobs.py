@@ -159,7 +159,7 @@ async def test_consecutive_patches_share_one_pending_job(
     await patch_trip(api_client, other.id, {"estimated_arrival": "2026-11-12T09:45:00"})
 
     (job,) = await jobs_of(db_session, event.id)
-    assert job.trip_id == trip.id  # при слиянии trip_id остаётся от первой правки
+    assert job.trip_id == other.id  # при слиянии trip_id уходит к последней правке
     # правки записаны все: сливается только задание пересчёта
     actions = [row.action for row in await audit_rows(db_session, event.id)]
     assert actions == ["trip_updated"] * 3
