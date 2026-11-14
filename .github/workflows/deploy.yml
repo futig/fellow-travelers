@@ -19,7 +19,47 @@ permissions:
   contents: read
 
 jobs:
+  tests:
+    uses: ./.github/workflows/ci.yml
+
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      backend: ${{ steps.filter.outputs.backend }}
+      frontend: ${{ steps.filter.outputs.frontend }}
+      caddy: ${{ steps.filter.outputs.caddy }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: filter
+        name: Определить изменённые компоненты
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BEFORE: ${{ github.event.before }}
+          SHA: ${{ github.sha }}
+        run: |
+          backend=false
+          frontend=false
+          caddy=false
+          if [ "$EVENT_NAME" = "workflow_dispatch" ] || \
+             ! git diff --quiet "$BEFORE" "$SHA" -- .github/workflows/deploy.yml; then
+            backend=true
+            frontend=true
+            caddy=true
+          else
+            git diff --quiet "$BEFORE" "$SHA" -- 'backend/**' || backend=true
+            git diff --quiet "$BEFORE" "$SHA" -- 'frontend/**' || frontend=true
+            git diff --quiet "$BEFORE" "$SHA" -- 'deploy/caddy/**' || caddy=true
+          fi
+          {
+            echo "backend=$backend"
+            echo "frontend=$frontend"
+            echo "caddy=$caddy"
+          } >> "$GITHUB_OUTPUT"
+
   deploy:
+    needs: [tests, changes]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -80,34 +120,44 @@ jobs:
           printf '%s' "$token" | docker login --username iam --password-stdin cr.yandex
 
       - name: Образ бэкенда (api и bot)
+        if: needs.changes.outputs.backend == 'true'
         uses: docker/build-push-action@v6
         with:
           context: ./backend
           push: true
-          tags: cr.yandex/${{ secrets.YC_REGISTRY_ID }}/api:${{ github.sha }}
+          # latest нужен неизменным компонентам в спецификации как fallback на текущий образ.
+          tags: |
+            cr.yandex/${{ secrets.YC_REGISTRY_ID }}/api:${{ github.sha }}
+            cr.yandex/${{ secrets.YC_REGISTRY_ID }}/api:latest
           provenance: false
           sbom: false
           cache-from: type=gha,scope=api
           cache-to: type=gha,mode=max,scope=api
 
       - name: Образ мини-приложения
+        if: needs.changes.outputs.frontend == 'true'
         uses: docker/build-push-action@v6
         with:
           context: ./frontend
           build-args: VITE_BOT_USERNAME=${{ secrets.BOT_USERNAME }}
           push: true
-          tags: cr.yandex/${{ secrets.YC_REGISTRY_ID }}/web:${{ github.sha }}
+          tags: |
+            cr.yandex/${{ secrets.YC_REGISTRY_ID }}/web:${{ github.sha }}
+            cr.yandex/${{ secrets.YC_REGISTRY_ID }}/web:latest
           provenance: false
           sbom: false
           cache-from: type=gha,scope=web
           cache-to: type=gha,mode=max,scope=web
 
       - name: Образ Caddy
+        if: needs.changes.outputs.caddy == 'true'
         uses: docker/build-push-action@v6
         with:
           context: ./deploy/caddy
           push: true
-          tags: cr.yandex/${{ secrets.YC_REGISTRY_ID }}/caddy:${{ github.sha }}
+          tags: |
+            cr.yandex/${{ secrets.YC_REGISTRY_ID }}/caddy:${{ github.sha }}
+            cr.yandex/${{ secrets.YC_REGISTRY_ID }}/caddy:latest
           provenance: false
           sbom: false
           cache-from: type=gha,scope=caddy
@@ -115,9 +165,9 @@ jobs:
 
       - name: Собрать спецификацию контейнеров
         env:
-          API_IMAGE: cr.yandex/${{ secrets.YC_REGISTRY_ID }}/api:${{ github.sha }}
-          WEB_IMAGE: cr.yandex/${{ secrets.YC_REGISTRY_ID }}/web:${{ github.sha }}
-          CADDY_IMAGE: cr.yandex/${{ secrets.YC_REGISTRY_ID }}/caddy:${{ github.sha }}
+          API_IMAGE: cr.yandex/${{ secrets.YC_REGISTRY_ID }}/api:${{ needs.changes.outputs.backend == 'true' && github.sha || 'latest' }}
+          WEB_IMAGE: cr.yandex/${{ secrets.YC_REGISTRY_ID }}/web:${{ needs.changes.outputs.frontend == 'true' && github.sha || 'latest' }}
+          CADDY_IMAGE: cr.yandex/${{ secrets.YC_REGISTRY_ID }}/caddy:${{ needs.changes.outputs.caddy == 'true' && github.sha || 'latest' }}
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
           BOT_USERNAME: ${{ secrets.BOT_USERNAME }}
           TELEGRAM_RELAY_URL: ${{ secrets.TELEGRAM_RELAY_URL }}
