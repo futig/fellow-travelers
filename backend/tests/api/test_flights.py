@@ -1,0 +1,452 @@
+import asyncio
+import logging
+import uuid
+from collections.abc import Iterator
+from datetime import UTC, date, datetime, timedelta
+from typing import Any
+
+import pytest
+from fastapi import FastAPI
+from httpx import AsyncClient, Response
+from sqlalchemy import delete, func, select, update
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
+
+from app.api.deps import get_flight_provider
+from app.flights import FakeFlightProvider, FlightProvider, ProviderFlight
+from app.models import BackgroundJob, Event, Trip, TripSource, TripStatus, User
+from app.services import flights as flights_service
+from tests.api.conftest import auth_headers
+from tests.factories import get_location, make_event, make_membership, make_trip, make_user
+from tests.helpers.audit_replay import audit_rows
+from tests.helpers.concurrency import client_on_engine, wait
+from tests.helpers.contract import assert_contract
+
+DAY = date(2026, 11, 12)
+DEPARTURE = datetime(2026, 11, 12, 7, 0, tzinfo=UTC)
+
+
+def provider_flight(**overrides: Any) -> ProviderFlight:
+    fields: dict[str, Any] = {
+        "provider_ref": "ref-1",
+        "number": "SU1234",
+        "departure_iata": "OVB",
+        "arrival_iata": "SVO",
+        "scheduled_departure": DEPARTURE,
+        "scheduled_arrival": DEPARTURE + timedelta(hours=4),
+        "estimated_arrival": DEPARTURE + timedelta(hours=4, minutes=20),
+        "status": TripStatus.DELAYED,
+    }
+    fields.update(overrides)
+    return ProviderFlight(**fields)
+
+
+@pytest.fixture
+def fake(app: FastAPI) -> FakeFlightProvider:
+    provider = FakeFlightProvider([provider_flight()])
+    app.dependency_overrides[get_flight_provider] = lambda: provider
+    return provider
+
+
+@pytest.fixture
+async def event(db_session: AsyncSession, user: User) -> Event:
+    return await make_event(db_session, admin_id=user.id)
+
+
+async def search(
+    client: AsyncClient,
+    event_id: Any,
+    number: str = "su 1234",
+    day: str = "2026-11-12",
+    telegram_id: int | None = 42,
+) -> Response:
+    headers = {} if telegram_id is None else auth_headers(telegram_id)
+    response = await client.get(
+        "/flights/search",
+        params={"event_id": str(event_id), "number": number, "date": day},
+        headers=headers,
+    )
+    assert_contract(response, "GET", "/flights/search")
+    return response
+
+
+async def trips_in(session: AsyncSession, event_id: uuid.UUID) -> list[Trip]:
+    return list((await session.scalars(select(Trip).where(Trip.event_id == event_id))).all())
+
+
+async def test_search_saves_provider_flight(
+    api_client: AsyncClient, db_session: AsyncSession, event: Event, fake: FakeFlightProvider
+) -> None:
+    response = await search(api_client, event.id)
+
+    assert response.status_code == 200
+    [body] = response.json()
+    assert body["number"] == "SU1234"
+    assert body["source"] == "provider"
+    assert body["status"] == "delayed"
+    assert body["departure_location"]["code"] == "OVB"
+    assert body["arrival_location"]["code"] == "SVO"
+    assert body["scheduled_departure"] == "2026-11-12T14:00:00+07:00"
+    assert body["estimated_arrival"] == "2026-11-12T14:20:00+03:00"
+    [stored] = await trips_in(db_session, event.id)
+    assert str(stored.id) == body["id"]
+    assert stored.source == TripSource.PROVIDER
+    assert stored.provider_ref == "ref-1"
+    assert stored.next_poll_at is not None
+    assert abs(stored.next_poll_at - datetime.now(UTC)) < timedelta(minutes=1)
+
+
+async def test_repeated_search_does_not_duplicate(
+    api_client: AsyncClient, db_session: AsyncSession, event: Event, fake: FakeFlightProvider
+) -> None:
+    first = (await search(api_client, event.id)).json()
+
+    second = (await search(api_client, event.id)).json()
+
+    assert [t["id"] for t in second] == [t["id"] for t in first]
+    assert len(await trips_in(db_session, event.id)) == 1
+    assert await audit_rows(db_session, event.id) == []  # данные те же: истории нет
+
+
+async def test_repeated_search_returns_updated_data_and_writes_history(
+    api_client: AsyncClient, db_session: AsyncSession, event: Event, fake: FakeFlightProvider
+) -> None:
+    first = (await search(api_client, event.id)).json()
+    fake.add(provider_flight(status=TripStatus.CANCELLED))
+
+    second = (await search(api_client, event.id)).json()
+
+    assert [t["id"] for t in second] == [t["id"] for t in first]
+    assert second[0]["status"] == "cancelled"
+    assert len(await trips_in(db_session, event.id)) == 1
+    (row,) = await audit_rows(db_session, event.id)
+    assert (row.action, row.reason, row.actor_kind) == ("trip_updated", "provider_update", "system")
+
+
+async def test_manual_trip_with_same_key_is_adopted(
+    api_client: AsyncClient, db_session: AsyncSession, event: Event, fake: FakeFlightProvider
+) -> None:
+    manual = await make_trip(
+        db_session,
+        event_id=event.id,
+        number="SU1234",
+        departure_location_id=(await get_location(db_session, "OVB")).id,
+        arrival_location_id=(await get_location(db_session, "LED")).id,
+        scheduled_departure=DEPARTURE,
+        scheduled_arrival=DEPARTURE + timedelta(hours=5),
+    )
+    await db_session.commit()
+
+    response = await search(api_client, event.id)
+
+    [body] = response.json()
+    assert body["id"] == str(manual.id)
+    assert body["source"] == "provider"
+    assert body["arrival_location"]["code"] == "SVO"
+    [stored] = await trips_in(db_session, event.id)
+    await db_session.refresh(stored)
+    assert stored.provider_ref == "ref-1"
+    assert stored.status == TripStatus.DELAYED
+    assert stored.estimated_arrival == DEPARTURE + timedelta(hours=4, minutes=20)
+    jobs = await db_session.scalar(
+        select(func.count()).select_from(BackgroundJob).where(BackgroundJob.event_id == event.id)
+    )
+    assert jobs == 1
+    (row,) = await audit_rows(db_session, event.id)
+    assert (row.action, row.reason, row.actor_kind) == ("trip_updated", "provider_update", "system")
+    assert row.trip_id == manual.id
+
+
+async def test_unknown_airport_skips_flight_with_warning(
+    api_client: AsyncClient,
+    db_session: AsyncSession,
+    event: Event,
+    fake: FakeFlightProvider,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    fake.add(provider_flight(provider_ref="ref-2", arrival_iata="ZZZ"))
+
+    with caplog.at_level(logging.WARNING, logger="app.services.flights"):
+        response = await search(api_client, event.id)
+
+    assert [t["source"] for t in response.json()] == ["provider"]
+    assert len(response.json()) == 1
+    assert len(await trips_in(db_session, event.id)) == 1
+    [record] = [r for r in caplog.records if r.name == "app.services.flights"]
+    assert "ZZZ" in record.getMessage()
+    assert "SU1234" not in record.getMessage()
+
+
+async def test_flight_with_arrival_before_departure_is_skipped(
+    api_client: AsyncClient, event: Event, fake: FakeFlightProvider
+) -> None:
+    fake.add(provider_flight(provider_ref="ref-2", scheduled_arrival=DEPARTURE))
+
+    response = await search(api_client, event.id)
+
+    assert len(response.json()) == 1
+
+
+async def test_no_provider_configured_is_503(
+    api_client: AsyncClient, app: FastAPI, event: Event
+) -> None:
+    app.dependency_overrides[get_flight_provider] = lambda: None
+
+    response = await search(api_client, event.id)
+
+    assert response.status_code == 503
+    assert response.json()["error"]["code"] == "FLIGHT_PROVIDER_UNAVAILABLE"
+
+
+async def test_unavailable_provider_is_503(
+    api_client: AsyncClient, event: Event, fake: FakeFlightProvider
+) -> None:
+    fake.unavailable = True
+
+    response = await search(api_client, event.id)
+
+    assert response.status_code == 503
+    assert response.json()["error"]["code"] == "FLIGHT_PROVIDER_UNAVAILABLE"
+
+
+async def test_provider_timeout_is_503(
+    api_client: AsyncClient,
+    event: Event,
+    fake: FakeFlightProvider,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(flights_service, "PROVIDER_TIMEOUT_SECONDS", 0.05)
+    fake.delay = 1.0
+
+    response = await search(api_client, event.id)
+
+    assert response.status_code == 503
+    assert response.json()["error"]["code"] == "FLIGHT_PROVIDER_UNAVAILABLE"
+
+
+async def test_stranger_gets_404(
+    api_client: AsyncClient,
+    db_session: AsyncSession,
+    event: Event,
+    other_user: User,
+    fake: FakeFlightProvider,
+) -> None:
+    response = await search(api_client, event.id, telegram_id=43)
+
+    assert response.status_code == 404
+    assert response.json()["error"]["code"] == "NOT_FOUND"
+    assert await trips_in(db_session, event.id) == []
+
+
+async def test_unknown_event_gets_404(api_client: AsyncClient, fake: FakeFlightProvider) -> None:
+    response = await search(api_client, uuid.uuid4())
+
+    assert response.status_code == 404
+
+
+async def test_unauthorized_is_401(
+    api_client: AsyncClient, event: Event, fake: FakeFlightProvider
+) -> None:
+    response = await search(api_client, event.id, telegram_id=None)
+
+    assert response.status_code == 401
+
+
+async def test_member_can_search(
+    api_client: AsyncClient,
+    db_session: AsyncSession,
+    other_user: User,
+    fake: FakeFlightProvider,
+) -> None:
+    admin = await db_session.get(User, other_user.id)
+    assert admin is not None
+    event = await make_event(db_session, admin_id=admin.id)
+    from tests.factories import make_user
+
+    member = await make_user(db_session, telegram_id=42, first_name="Ivan")
+    await make_membership(db_session, event_id=event.id, user_id=member.id)
+    await db_session.commit()
+
+    response = await search(api_client, event.id, telegram_id=42)
+
+    assert response.status_code == 200
+    assert len(response.json()) == 1
+
+
+async def test_admin_without_membership_can_search(
+    api_client: AsyncClient, event: Event, fake: FakeFlightProvider
+) -> None:
+    response = await search(api_client, event.id)
+
+    assert response.status_code == 200
+
+
+@pytest.mark.parametrize("number", ["S", "SU", "SU-1234", "SU1234567", "SU 12 34"])
+async def test_bad_number_is_422(
+    api_client: AsyncClient, event: Event, fake: FakeFlightProvider, number: str
+) -> None:
+    response = await search(api_client, event.id, number=number)
+
+    assert response.status_code == 422
+
+
+@pytest.mark.parametrize("day", ["12.11.2026", "2026-13-01", "tomorrow"])
+async def test_bad_date_is_422(
+    api_client: AsyncClient, event: Event, fake: FakeFlightProvider, day: str
+) -> None:
+    response = await search(api_client, event.id, day=day)
+
+    assert response.status_code == 422
+
+
+async def test_missing_params_is_422(api_client: AsyncClient, fake: FakeFlightProvider) -> None:
+    response = await api_client.get("/flights/search", headers=auth_headers())
+    assert_contract(response, "GET", "/flights/search")
+
+    assert response.status_code == 422
+
+
+async def test_fake_provider_setting_generates_flight(
+    api_client: AsyncClient, app: FastAPI, event: Event
+) -> None:
+    provider: FlightProvider = FakeFlightProvider()
+    app.dependency_overrides[get_flight_provider] = lambda: provider
+
+    response = await search(api_client, event.id, number="DP 401")
+
+    [body] = response.json()
+    assert body["number"] == "DP401"
+    assert body["departure_location"]["code"] == "SVO"
+    assert body["arrival_location"]["code"] == "LED"
+    assert body["scheduled_departure"] == "2026-11-12T10:00:00+03:00"
+
+
+@pytest.fixture(autouse=True)
+def _clear_overrides(app: FastAPI) -> Iterator[None]:
+    yield
+    app.dependency_overrides.pop(get_flight_provider, None)
+
+
+async def test_two_refs_for_one_flight_give_one_trip(
+    api_client: AsyncClient, db_session: AsyncSession, event: Event, fake: FakeFlightProvider
+) -> None:
+    fake.add(provider_flight(provider_ref="ref-2"))  # тот же номер и вылет под другим ref
+
+    response = await search(api_client, event.id)
+
+    assert len(response.json()) == 1
+    [stored] = await trips_in(db_session, event.id)
+    assert stored.provider_ref == "ref-1"
+
+
+async def test_trip_of_other_provider_ref_is_not_adopted_or_duplicated(
+    app: FastAPI,
+    api_client: AsyncClient,
+    db_session: AsyncSession,
+    event: Event,
+    fake: FakeFlightProvider,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    first = (await search(api_client, event.id)).json()
+    other = FakeFlightProvider([provider_flight(provider_ref="ref-2")])
+    app.dependency_overrides[get_flight_provider] = lambda: other
+
+    with caplog.at_level(logging.WARNING, logger="app.services.flights"):
+        response = await search(api_client, event.id)
+
+    assert response.json() == []
+    [stored] = await trips_in(db_session, event.id)
+    assert str(stored.id) == first[0]["id"]
+    assert stored.provider_ref == "ref-1"
+    assert any(r.levelno == logging.WARNING for r in caplog.records)
+    assert all("SU1234" not in r.getMessage() for r in caplog.records)
+
+
+async def test_connection_is_released_while_waiting_for_provider(
+    api_client: AsyncClient,
+    db_session: AsyncSession,
+    event: Event,
+    fake: FakeFlightProvider,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    in_transaction: list[bool] = []
+    original = flights_service._query_provider
+
+    async def spy(*args: Any, **kwargs: Any) -> list[ProviderFlight]:
+        in_transaction.append(db_session.in_transaction())
+        return await original(*args, **kwargs)
+
+    monkeypatch.setattr(flights_service, "_query_provider", spy)
+
+    response = await search(api_client, event.id)
+
+    assert response.status_code == 200
+    assert in_transaction == [False]
+
+
+async def test_research_of_uncancelled_flight_restarts_polling(
+    api_client: AsyncClient, db_session: AsyncSession, event: Event, fake: FakeFlightProvider
+) -> None:
+    fake.add(provider_flight(status=TripStatus.CANCELLED))
+    (first,) = (await search(api_client, event.id)).json()
+    # воркер прекращает опрос отменённого рейса (Д2)
+    await db_session.execute(
+        update(Trip).where(Trip.id == uuid.UUID(first["id"])).values(next_poll_at=None)
+    )
+    await db_session.commit()
+    fake.add(provider_flight(status=TripStatus.DELAYED))  # «отмена отмены»
+
+    (second,) = (await search(api_client, event.id)).json()
+
+    assert second["id"] == first["id"]
+    assert second["status"] == "delayed"
+    [stored] = await trips_in(db_session, event.id)
+    await db_session.refresh(stored)
+    assert stored.next_poll_at is not None
+    assert abs(stored.next_poll_at - datetime.now(UTC)) < timedelta(minutes=1)
+
+
+async def test_concurrent_searches_make_one_trip(app: FastAPI, db_engine: AsyncEngine) -> None:
+    """Два параллельных поиска одного рейса: блокировка группы даёт один рейс и один id."""
+    sessions = async_sessionmaker(db_engine, expire_on_commit=False)
+    async with sessions() as session:
+        admin = await make_user(session, telegram_id=7_300_001, first_name="Ivan")
+        event = await make_event(session, admin_id=admin.id)
+        await session.commit()
+        event_id, admin_id = event.id, admin.id
+    # задержка поставщика: оба запроса уже в поиске, когда первый берёт блокировку группы
+    provider = FakeFlightProvider([provider_flight()], delay=0.2)
+    app.dependency_overrides[get_flight_provider] = lambda: provider
+    try:
+        async with client_on_engine(app, sessions) as client:
+            # client_on_engine очищает переопределения при выходе, поэтому ставим их заново
+            app.dependency_overrides[get_flight_provider] = lambda: provider
+            responses = await wait(
+                asyncio.gather(
+                    *(
+                        client.get(
+                            "/flights/search",
+                            params={
+                                "event_id": str(event_id),
+                                "number": "su 1234",
+                                "date": "2026-11-12",
+                            },
+                            headers=auth_headers(7_300_001),
+                        )
+                        for _ in range(2)
+                    )
+                )
+            )
+        for response in responses:
+            assert_contract(response, "GET", "/flights/search")
+            assert response.status_code == 200
+        ids = {body["id"] for response in responses for body in response.json()}
+        assert len(ids) == 1
+        async with sessions() as session:
+            stored = (await session.scalars(select(Trip).where(Trip.event_id == event_id))).all()
+            assert [str(trip.id) for trip in stored] == list(ids)
+    finally:
+        app.dependency_overrides.pop(get_flight_provider, None)
+        async with sessions() as session:
+            await session.execute(delete(Event).where(Event.id == event_id))
+            await session.execute(delete(User).where(User.id == admin_id))
+            await session.commit()

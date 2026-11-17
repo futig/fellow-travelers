@@ -25,6 +25,9 @@ services:
       DEBUG: "${DEBUG}"
       LOG_LEVEL: "${LOG_LEVEL:-INFO}"
       WORKER_METRICS_PORT: "${WORKER_METRICS_PORT:-9100}"
+      FLIGHT_PROVIDER: "${FLIGHT_PROVIDER}"
+      AERODATABOX_API_KEY: "${AERODATABOX_API_KEY}"
+      AERODATABOX_GATEWAY: "${AERODATABOX_GATEWAY}"
     depends_on:
       - db
     restart: always
@@ -55,12 +58,20 @@ services:
       DATABASE_URL: "postgresql+asyncpg://fellow:${POSTGRES_PASSWORD}@db:5432/fellow_travelers"
       BOT_TOKEN: "${BOT_TOKEN}"
       BOT_USERNAME: "${BOT_USERNAME}"
+      TELEGRAM_RELAY_URL: "${TELEGRAM_RELAY_URL}"
+      TELEGRAM_RELAY_SECRET: "${TELEGRAM_RELAY_SECRET}"
       INIT_DATA_MAX_AGE_SECONDS: ${INIT_DATA_MAX_AGE_SECONDS}
       DEBUG: "${DEBUG}"
       LOG_LEVEL: "${LOG_LEVEL:-INFO}"
       WORKER_METRICS_PORT: "${WORKER_METRICS_PORT:-9100}"
+      FLIGHT_PROVIDER: "${FLIGHT_PROVIDER}"
+      AERODATABOX_API_KEY: "${AERODATABOX_API_KEY}"
+      AERODATABOX_GATEWAY: "${AERODATABOX_GATEWAY}"
+      RETENTION_ENABLED: "${RETENTION_ENABLED}"
     depends_on:
       - db
+    # воркер дозавершает текущую работу после SIGTERM
+    stop_grace_period: 30s
     # метрики воркера на порту 9100 доступны только внутри сети compose
     healthcheck:
       test: ["CMD", "python", "-m", "app.worker.healthcheck"]

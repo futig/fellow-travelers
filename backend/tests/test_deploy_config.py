@@ -95,6 +95,29 @@ def test_log_level_and_worker_metrics_port_reach_container_environment(
         assert "WORKER_METRICS_PORT" not in environment
 
 
+@pytest.mark.parametrize(
+    ("path", "url", "secret"),
+    [
+        (DEV_COMPOSE, "${TELEGRAM_RELAY_URL:-}", "${TELEGRAM_RELAY_SECRET:-}"),
+        (PROD_COMPOSE, "${TELEGRAM_RELAY_URL}", "${TELEGRAM_RELAY_SECRET}"),
+    ],
+    ids=["dev", "prod"],
+)
+@pytest.mark.parametrize("service", ["bot", "worker"])
+def test_bot_and_worker_get_relay_settings_and_bot_credentials(
+    path: Path, url: str, secret: str, service: str
+) -> None:
+    compose: dict[str, Any] = yaml.safe_load(path.read_text(encoding="utf-8"))
+
+    environment = compose["services"][service]["environment"]
+
+    # воркер шлёт уведомления через тот же relay, что и бот; значения только из окружения
+    assert environment["TELEGRAM_RELAY_URL"] == url
+    assert environment["TELEGRAM_RELAY_SECRET"] == secret
+    assert str(environment["BOT_TOKEN"]).startswith("${BOT_TOKEN")
+    assert str(environment["BOT_USERNAME"]).startswith("${BOT_USERNAME")
+
+
 # ---------------------------------------------------------------- Dockerfile, образы, пакеты
 
 
@@ -274,3 +297,120 @@ def test_proxy_location_parser_flags_other_locations() -> None:
 )
 def test_pip_install_matcher_recognises_common_spellings(command: str) -> None:
     assert PIP_INSTALL.search(command)
+
+
+@pytest.mark.parametrize(
+    ("path", "provider", "retention"),
+    [
+        (DEV_COMPOSE, "${FLIGHT_PROVIDER:-none}", "${RETENTION_ENABLED:-false}"),
+        # envsubst не понимает `:-`: в проде значение целиком подставляется шагом деплоя
+        (PROD_COMPOSE, "${FLIGHT_PROVIDER}", "${RETENTION_ENABLED}"),
+    ],
+    ids=["dev", "prod"],
+)
+def test_flight_provider_and_retention_reach_the_right_containers(
+    path: Path, provider: str, retention: str
+) -> None:
+    compose: dict[str, Any] = yaml.safe_load(path.read_text(encoding="utf-8"))
+    services = compose["services"]
+
+    # без проводки значения из .env сервера не доходят до контейнера; дефолты как в Settings
+    for name in ("api", "worker"):
+        assert str(services[name]["environment"]["FLIGHT_PROVIDER"]).strip('"') == provider
+    assert str(services["worker"]["environment"]["RETENTION_ENABLED"]).strip('"') == retention
+    # очистку данных запускает только воркер
+    assert "RETENTION_ENABLED" not in services["api"]["environment"]
+
+
+def test_deploy_passes_flight_provider_and_retention_to_prod_spec() -> None:
+    workflow: dict[str, Any] = yaml.safe_load(
+        (REPO_DIR / ".github" / "workflows" / "deploy.yml").read_text(encoding="utf-8")
+    )
+    steps = [
+        step
+        for job in workflow["jobs"].values()
+        for step in job.get("steps", [])
+        if step.get("name") == "Собрать спецификацию контейнеров"
+    ]
+    assert len(steps) == 1
+    step = steps[0]
+
+    # секрет не задан -> безопасное умолчание
+    assert step["env"]["FLIGHT_PROVIDER"] == "${{ secrets.FLIGHT_PROVIDER || 'none' }}"
+    assert step["env"]["RETENTION_ENABLED"] == "${{ secrets.RETENTION_ENABLED || 'false' }}"
+    envsubst_list = re.search(r"envsubst\s+'([^']*)'", step["run"])
+    assert envsubst_list
+    listed = set(re.findall(r"\$\{(\w+)\}", envsubst_list.group(1)))
+    assert {"FLIGHT_PROVIDER", "RETENTION_ENABLED"} <= listed
+
+    # envsubst понимает только `${NAME}`: любое другое выражение остаётся в спецификации как есть
+    compose: dict[str, Any] = yaml.safe_load(PROD_COMPOSE.read_text(encoding="utf-8"))
+    services = compose["services"]
+    plain = re.compile(r"\$\{(\w+)\}")
+    for service, name in (
+        ("api", "FLIGHT_PROVIDER"),
+        ("worker", "FLIGHT_PROVIDER"),
+        ("worker", "RETENTION_ENABLED"),
+    ):
+        value = str(services[service]["environment"][name]).strip('"')
+        match = plain.fullmatch(value)
+        assert match, f"{service}.{name}: {value}"
+        assert match.group(1) in listed
+
+
+@pytest.mark.parametrize("path", [DEV_COMPOSE, PROD_COMPOSE], ids=["dev", "prod"])
+def test_worker_has_time_to_finish_current_work_on_stop(path: Path) -> None:
+    compose: dict[str, Any] = yaml.safe_load(path.read_text(encoding="utf-8"))
+
+    # отправка в Telegram идёт до 20 с: docker по умолчанию убил бы воркер через 10 с
+    assert compose["services"]["worker"]["stop_grace_period"] == "30s"
+
+
+@pytest.mark.parametrize(
+    ("path", "key", "gateway"),
+    [
+        (DEV_COMPOSE, "${AERODATABOX_API_KEY:-}", "${AERODATABOX_GATEWAY:-apimarket}"),
+        (PROD_COMPOSE, "${AERODATABOX_API_KEY}", "${AERODATABOX_GATEWAY}"),
+    ],
+    ids=["dev", "prod"],
+)
+def test_aerodatabox_settings_reach_api_and_worker(path: Path, key: str, gateway: str) -> None:
+    compose: dict[str, Any] = yaml.safe_load(path.read_text(encoding="utf-8"))
+    services = compose["services"]
+
+    for name in ("api", "worker"):
+        env = services[name]["environment"]
+        assert str(env["AERODATABOX_API_KEY"]).strip('"') == key
+        assert str(env["AERODATABOX_GATEWAY"]).strip('"') == gateway
+    # бот поставщика рейсов не использует: ключ ему не нужен
+    assert "AERODATABOX_API_KEY" not in services.get("bot", {}).get("environment", {})
+
+
+def test_deploy_passes_aerodatabox_settings_to_prod_spec() -> None:
+    workflow: dict[str, Any] = yaml.safe_load(
+        (REPO_DIR / ".github" / "workflows" / "deploy.yml").read_text(encoding="utf-8")
+    )
+    steps = [
+        step
+        for job in workflow["jobs"].values()
+        for step in job.get("steps", [])
+        if step.get("name") == "Собрать спецификацию контейнеров"
+    ]
+    assert len(steps) == 1
+    step = steps[0]
+
+    assert step["env"]["AERODATABOX_API_KEY"] == "${{ secrets.AERODATABOX_API_KEY }}"
+    assert step["env"]["AERODATABOX_GATEWAY"] == "${{ secrets.AERODATABOX_GATEWAY || 'apimarket' }}"
+    envsubst_list = re.search(r"envsubst\s+'([^']*)'", step["run"])
+    assert envsubst_list
+    listed = set(re.findall(r"\$\{(\w+)\}", envsubst_list.group(1)))
+    assert {"AERODATABOX_API_KEY", "AERODATABOX_GATEWAY"} <= listed
+
+    compose: dict[str, Any] = yaml.safe_load(PROD_COMPOSE.read_text(encoding="utf-8"))
+    plain = re.compile(r"\$\{(\w+)\}")
+    for service in ("api", "worker"):
+        for name in ("AERODATABOX_API_KEY", "AERODATABOX_GATEWAY"):
+            value = str(compose["services"][service]["environment"][name]).strip('"')
+            match = plain.fullmatch(value)
+            assert match, f"{service}.{name}: {value}"
+            assert match.group(1) in listed

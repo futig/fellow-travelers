@@ -4,7 +4,14 @@ from uuid import UUID, uuid4
 
 import pytest
 
-from app.matching import MatchCandidate, find_group, is_compatible
+from app.matching import (
+    MatchCandidate,
+    find_group,
+    fits_capacity,
+    fits_transfer,
+    fits_waits,
+    is_compatible,
+)
 from tests.matching.helpers import OTHER_AIRPORT, cand
 
 MSK = timezone(timedelta(hours=3))
@@ -204,3 +211,47 @@ def test_candidate_rejects_invalid_values(passengers: int, baggage: int, wait: i
             baggage=baggage,
             max_wait=timedelta(minutes=wait),
         )
+
+
+@pytest.mark.parametrize(
+    ("candidate", "others", "expected"),
+    [
+        pytest.param(cand("10:00", wait=15), [cand("10:10")], True, id="pair-ok"),
+        pytest.param(cand("10:00", wait=5), [cand("10:10")], False, id="wait-too-short"),
+        pytest.param(cand("10:00", bag=2), [cand("10:00", bag=1)], False, id="baggage-over"),
+        pytest.param(cand("10:00", pax=2), [cand("10:00"), cand("10:00")], False, id="pax-over"),
+        pytest.param(
+            cand("10:00", airport=OTHER_AIRPORT), [cand("10:00")], False, id="other-airport"
+        ),
+        pytest.param(cand("10:00"), [], True, id="alone"),
+    ],
+)
+def test_fits_transfer_examples(
+    candidate: MatchCandidate, others: list[MatchCandidate], expected: bool
+) -> None:
+    assert fits_transfer(candidate, others) is expected
+
+
+def test_fits_capacity_and_waits_are_independent() -> None:
+    far = [cand("10:00"), cand("11:00")]  # ожидание не сходится, мест хватает
+    assert fits_capacity(far)
+    assert not fits_waits(far)
+    full = [cand("10:00", pax=2), cand("10:00", pax=2)]  # ожидание сходится, мест нет
+    assert fits_waits(full)
+    assert not fits_capacity(full)
+    assert not is_compatible(far)
+    assert not is_compatible(full)
+
+
+def test_fits_transfer_departed_count_in_capacity_only() -> None:
+    departed = cand("10:00", pax=2)
+    # уехавший со спутником занимает два места: двое ждущих уже не помещаются
+    assert not fits_transfer(cand("10:05", wait=15), [cand("10:08")], [departed])
+    assert fits_transfer(cand("10:05", wait=15), [], [departed])
+    # уехавший не участвует в ожидании: он улетел давно, а ждущие сходятся между собой
+    long_gone = cand("10:00", wait=15)
+    assert fits_transfer(cand("10:20", wait=15), [cand("10:08", wait=15)], [long_gone])
+    # и не участвует в проверке аэропорта
+    assert fits_transfer(cand("10:20"), [], [cand("10:00", airport=OTHER_AIRPORT)])
+    # багаж уехавшего считается
+    assert not fits_transfer(cand("10:00", bag=1), [], [cand("10:00", bag=2)])

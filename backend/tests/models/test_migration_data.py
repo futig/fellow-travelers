@@ -16,13 +16,15 @@ import pytest
 from alembic import command
 from fastapi import FastAPI
 from httpx import AsyncClient, Response
-from sqlalchemy import select
+from sqlalchemy import inspect, select, text
+from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from app.models import (
     Application,
     ApplicationStatus,
     BackgroundJob,
+    Base,
     JobKind,
     JobStatus,
     Transfer,
@@ -59,13 +61,46 @@ class OldGroup:
     waiting: list[uuid.UUID] = field(default_factory=list)
 
 
+# ORM-модели знают колонки, которых нет на схеме 0002 (их добавили поздние миграции), и пишут/читают
+# их всегда. На время посева такие колонки добавляются как nullable без ограничений; перед upgrade
+# убираются именно добавленные, чтобы настоящие миграции отработали как на живой БД.
+_ADDED_COLUMNS: list[tuple[str, str]] = []
+
+
+def _add_missing_columns(connection: Connection) -> list[tuple[str, str]]:
+    inspector = inspect(connection)
+    added: list[tuple[str, str]] = []
+    for table in Base.metadata.sorted_tables:
+        if not inspector.has_table(table.name):
+            continue
+        existing = {column["name"] for column in inspector.get_columns(table.name)}
+        for column in table.columns:
+            if column.name in existing:
+                continue
+            column_type = column.type.compile(dialect=connection.dialect)
+            connection.execute(
+                text(f'ALTER TABLE "{table.name}" ADD COLUMN "{column.name}" {column_type}')
+            )
+            added.append((table.name, column.name))
+    return added
+
+
 async def _to_0002(engine: AsyncEngine) -> None:
     # Alembic (env.py) сам вызывает asyncio.run, поэтому из работающего цикла — только в потоке
     await asyncio.to_thread(command.downgrade, alembic_config(), "0002")
     await engine.dispose()  # соединения пула знают про старую схему
+    async with engine.begin() as connection:
+        _ADDED_COLUMNS[:] = await connection.run_sync(_add_missing_columns)
 
 
 async def _to_head(engine: AsyncEngine) -> None:
+    async with engine.begin() as connection:
+        for table, column in _ADDED_COLUMNS:
+            await connection.execute(
+                text(f'ALTER TABLE "{table}" DROP COLUMN IF EXISTS "{column}"')
+            )
+    _ADDED_COLUMNS.clear()
+    await engine.dispose()
     await asyncio.to_thread(command.upgrade, alembic_config(), "head")
     await engine.dispose()
 

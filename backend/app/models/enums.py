@@ -70,6 +70,10 @@ class AuditReason(StrEnum):
     MEMBER_LEFT = "member_left"
     ALL_DEPARTED = "all_departed"
     ADMIN_EDIT = "admin_edit"
+    APPLICATION_CHANGED = "application_changed"
+    DEPARTURE_UNDONE = "departure_undone"
+    FLIGHT_CANCELLED = "flight_cancelled"
+    PROVIDER_UPDATE = "provider_update"
 
 
 class JobKind(StrEnum):
@@ -78,4 +82,23 @@ class JobKind(StrEnum):
 
 class JobStatus(StrEnum):
     PENDING = "pending"
+    FAILED = "failed"
+
+
+class NotificationKind(StrEnum):
+    TRANSFER_ASSIGNED = "transfer_assigned"
+    TRANSFER_CHANGED = "transfer_changed"
+    TRANSFER_LEFT = "transfer_left"
+    POINTS_CHANGED = "points_changed"
+    FLIGHT_CHANGED = "flight_changed"
+    FLIGHT_CANCELLED = "flight_cancelled"
+    # итог склейки разных видов в одной ещё не отправленной строке (M-04a)
+    SEVERAL_CHANGES = "several_changes"
+
+
+class NotificationStatus(StrEnum):
+    PENDING = "pending"
+    SENDING = "sending"
+    SENT = "sent"
+    SKIPPED = "skipped"
     FAILED = "failed"

@@ -13,6 +13,7 @@ from app.matching import (
     MatchCandidate,
     OpenTransfer,
     find_placement,
+    fits_transfer,
     members_to_exclude,
 )
 from app.models import (
@@ -24,6 +25,7 @@ from app.models import (
     TransferOrigin,
     TransferStatus,
     Trip,
+    TripStatus,
 )
 from app.observability import metrics
 from app.observability.deferred import defer_increment, defer_observe
@@ -85,10 +87,14 @@ async def _open_transfers(
 ) -> tuple[dict[uuid.UUID, Transfer], list[OpenTransfer]]:
     """Трансферы группы, которые можно дополнить: active, origin=auto, никто не уехал.
 
+    Трансфер, где у кого-то из ждущих рейс отменён (Д8), не дополняется.
+
     Состав берётся свежим из БД вместе с рейсами. Трансфер меньше чем из двух заявок
     (по инвариантам такого нет) не дополняем: `OpenTransfer` обещает минимум две.
     """
     departed_member = aliased(Application)
+    cancelled_member = aliased(Application)
+    cancelled_trip = aliased(Trip)
     transfers = list(
         (
             await session.scalars(
@@ -100,6 +106,12 @@ async def _open_transfers(
                     ~exists().where(
                         departed_member.transfer_id == Transfer.id,
                         departed_member.departed_at.is_not(None),
+                    ),
+                    ~exists().where(
+                        cancelled_member.transfer_id == Transfer.id,
+                        cancelled_member.departed_at.is_(None),
+                        cancelled_trip.id == cancelled_member.trip_id,
+                        cancelled_trip.status == TripStatus.CANCELLED,
                     ),
                 )
                 .execution_options(populate_existing=True)
@@ -152,6 +164,8 @@ async def _load_pool(
 ) -> _Pool:
     """Открытые трансферы и свободные заявки группы (searching, без отъезда и трансфера).
 
+    Заявки с отменённым рейсом (Д8) среди свободных не берутся.
+
     Всё свежее из БД, два запроса и ещё один при наличии открытых трансферов. `skip` — заявка,
     которую размещают отдельно: среди свободных её нет.
     """
@@ -164,6 +178,7 @@ async def _load_pool(
             Application.status == ApplicationStatus.SEARCHING,
             Application.departed_at.is_(None),
             Application.transfer_id.is_(None),
+            Trip.status != TripStatus.CANCELLED,
         )
         .order_by(Application.created_at, Application.id)
         .execution_options(populate_existing=True)
@@ -288,6 +303,8 @@ async def match_application(
             execution_options={"populate_existing": True},
         )
     ).scalar_one()
+    if own_trip.status == TripStatus.CANCELLED:
+        return None  # Д8: рейс отменён, заявка ждёт в searching без размещения
     pool = await _load_pool(session, application.event_id, skip=application.id)
     placed = await _place(session, application, _candidate(application, own_trip), pool, reason)
     _observe_match(
@@ -300,7 +317,11 @@ async def match_application(
 
 
 async def fill_event(
-    session: AsyncSession, event_id: uuid.UUID, *, trigger: MatchTrigger
+    session: AsyncSession,
+    event_id: uuid.UUID,
+    *,
+    trigger: MatchTrigger,
+    skip: uuid.UUID | None = None,
 ) -> FillResult:
     """Размещает ждущие заявки группы; только flush, без commit. Вызывать под `lock_event`.
 
@@ -314,8 +335,11 @@ async def fill_event(
 
     `trigger` идёт в метрики: `leave` после выхода из трансфера, `reconcile` в конце пересчёта.
     Они считают только настоящие посадки, без отказов (`_observe_match`).
+
+    `skip` — заявка, которую размещают отдельно после прохода (Д5: изменённая заявка не должна
+    занять место раньше ждущих); среди свободных её нет.
     """
-    pool = await _load_pool(session, event_id)
+    pool = await _load_pool(session, event_id, skip=skip)
     joined = created = 0
     for application_id in list(pool.free):
         entry = pool.free.get(application_id)
@@ -360,8 +384,10 @@ async def reconcile_event(
     `changed_trip_ids`. Активные трансферы (любой origin) берутся по `(created_at, id)` вместе с
     участниками и рейсами, свежими из БД. Уехавшие не исключаются и в совместимости не учитываются:
     `members_to_exclude` получает только ждущих, а заявки на изменённых рейсах как `changed`.
-    Исключённые уходят через `leave_transfer` в `searching` от системы с причиной
-    `incompatible_after_change`; трансфер с остатком меньше двух заявок расформировывается.
+    Сначала ждущие участники с отменённым рейсом (Д8) выходят в `searching` с причиной
+    `flight_cancelled` (`trip_id` — их рейс). Остальные исключённые уходят через `leave_transfer`
+    в `searching` от системы с причиной `incompatible_after_change`; трансфер с остатком
+    меньше двух заявок расформировывается.
     Если `changed_trip_ids` из одного рейса, его id попадает в записи истории этих выходов
     (`trip_id`): по ним видно, какая правка рейса вызвала исключение.
 
@@ -392,9 +418,23 @@ async def reconcile_event(
 
     # одна правка рейса — одна причина: её id попадает в историю; несколько рейсов сразу — без id
     cause_trip_id = next(iter(changed_trip_ids)) if len(changed_trip_ids) == 1 else None
-    excluded = 0
+    excluded = 0  # исключённые: отменённый рейс (Д8) и несовместимость
     for transfer_id in transfer_ids:
         waiting = [(app, trip) for app, trip in members[transfer_id] if app.departed_at is None]
+        # Д8: пассажиры отменённого рейса выходят до проверки совместимости
+        for app, trip in waiting:
+            if trip.status == TripStatus.CANCELLED and app.transfer_id == transfer_id:
+                await leave_transfer(
+                    session,
+                    app,
+                    new_status=ApplicationStatus.SEARCHING,
+                    actor=SYSTEM,
+                    reason=AuditReason.FLIGHT_CANCELLED,
+                    trip_id=app.trip_id,
+                )
+                excluded += 1
+        # вышедшие и участники расформированного трансфера уже без transfer_id
+        waiting = [(app, trip) for app, trip in waiting if app.transfer_id == transfer_id]
         changed = frozenset(app.id for app, _ in waiting if app.trip_id in changed_trip_ids)
         by_id = {app.id: app for app, _ in waiting}
         for application_id in members_to_exclude(
@@ -523,6 +563,38 @@ async def leave_transfer(
         details={"application_ids": [str(app.id) for app in remaining]},
     )
     defer_increment(session, metrics.transfers_dissolved_total.labels(reason.value))
+
+
+async def fits_current_transfer(session: AsyncSession, application: Application) -> bool:
+    """Подходит ли заявка с новыми данными остальным участникам её трансфера (Д5).
+
+    Места и багаж считаются по всем участникам, включая уехавших; аэропорт и ожидание — только по
+    ждущим.
+    """
+    rows = (
+        await session.execute(
+            select(Application, Trip)
+            .join(Trip, Trip.id == Application.trip_id)
+            .where(
+                Application.transfer_id == application.transfer_id,
+                Application.id != application.id,
+            )
+            .execution_options(populate_existing=True)
+        )
+    ).all()
+    own_trip = (
+        await session.execute(
+            select(Trip).where(Trip.id == application.trip_id),
+            execution_options={"populate_existing": True},
+        )
+    ).scalar_one()
+    if own_trip.status == TripStatus.CANCELLED:
+        return False  # Д8
+    return fits_transfer(
+        _candidate(application, own_trip),
+        [_candidate(app, trip) for app, trip in rows if app.departed_at is None],
+        [_candidate(app, trip) for app, trip in rows if app.departed_at is not None],
+    )
 
 
 async def mark_transfer_departed(

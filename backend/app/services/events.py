@@ -8,8 +8,18 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
 from app.errors import AppError, ErrorCode
-from app.models import Application, ApplicationStatus, Event, Membership, User
+from app.models import (
+    Application,
+    ApplicationStatus,
+    Event,
+    Membership,
+    NotificationKind,
+    User,
+)
 from app.schemas.event import DATES_ORDER_MESSAGE, EventCreate, EventUpdate
+from app.services.audit import iso
+from app.services.matching import lock_event
+from app.services.notifications import notify_many
 
 INVITE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
 INVITE_CODE_LENGTH = 6
@@ -92,15 +102,56 @@ def _dates_error() -> AppError:
     )
 
 
-async def update_event(session: AsyncSession, event: Event, data: EventUpdate) -> Event:
+_POINT_FIELDS = ("meeting_point", "pickup_point", "destination", "meeting_instruction")
+
+
+async def _notify_points_changed(session: AsyncSession, event: Event, author: User) -> None:
+    """Д12: участникам с активной заявкой без «Уехал», кроме автора; трансферы не трогаем."""
+    await session.refresh(event, ["updated_at"])
+    key = f"{NotificationKind.POINTS_CHANGED.value}:{event.id}:{iso(event.updated_at)}"
+    user_ids = (
+        await session.scalars(
+            select(Application.user_id).where(
+                Application.event_id == event.id,
+                Application.status != ApplicationStatus.CANCELLED,
+                Application.departed_at.is_(None),
+                Application.user_id != author.id,
+            )
+        )
+    ).all()
+    await notify_many(
+        session,
+        user_ids=user_ids,
+        event_id=event.id,
+        kind=NotificationKind.POINTS_CHANGED,
+        payload={"event_id": str(event.id)},
+        dedupe_key=key,
+    )
+
+
+async def update_event(
+    session: AsyncSession, event: Event, data: EventUpdate, author: User
+) -> Event:
+    """Правка группы админом; точки группы уведомляют участников.
+
+    Берёт блокировку группы первой, как сценарии подбора: строки `notifications` одной группы
+    пишут по очереди, иначе параллельная склейка тех же `pending` могла бы дать взаимоблокировку.
+    Группу, прочитанную до блокировки, перечитываем после неё.
+    """
+    await lock_event(session, event.id)
+    await session.refresh(event)
     changes = {name: getattr(data, name) for name in data.model_fields_set}
     starts_on: date = changes.get("starts_on", event.starts_on)
     ends_on: date = changes.get("ends_on", event.ends_on)
     if ends_on < starts_on:
         raise _dates_error()
+    points_before = {name: getattr(event, name) for name in _POINT_FIELDS}
     for name, value in changes.items():
         if name in ("meeting_point", "pickup_point", "destination") and value is not None:
             value = value.model_dump()
         setattr(event, name, value)
+    await session.flush()
+    if any(getattr(event, name) != points_before[name] for name in _POINT_FIELDS):
+        await _notify_points_changed(session, event, author)
     await session.commit()
     return event

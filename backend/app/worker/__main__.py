@@ -2,12 +2,17 @@ import asyncio
 import logging
 import signal
 
+from aiogram.utils.token import TokenValidationError
 from prometheus_client import start_http_server
 
+from app.bot.session import build_bot
 from app.config import get_settings
 from app.db import dispose_engine
+from app.flights import build_provider
 from app.observability.logging import configure_logging
-from app.worker import run
+from app.services.notification_sender import TelegramSender
+from app.worker import run, run_flight_polling, run_notification_sender
+from app.worker.retention import run_retention
 
 logger = logging.getLogger("app.worker")
 
@@ -30,8 +35,28 @@ async def main() -> None:
     metrics_server, _ = start_http_server(settings.worker_metrics_port)
     logger.info("Воркер запущен, метрики на порту %d", settings.worker_metrics_port)
     try:
-        await run(stop)
+        bot = build_bot(settings)
+    except TokenValidationError:
+        # токен в предупреждение не попадает: ни целиком, ни частями
+        logger.warning("Уведомления не отправляются: BOT_TOKEN не похож на токен Telegram")
+        bot = None
+    try:
+        provider = build_provider(settings)
+        loops = [run(stop)]
+        if bot is not None:
+            loops.append(run_notification_sender(stop, TelegramSender(bot)))
+        if provider is None:
+            logger.info("Поставщик рейсов не настроен: опрос рейсов не запускается")
+        else:
+            loops.append(run_flight_polling(stop, provider))
+        if settings.retention_enabled:
+            loops.append(run_retention(stop))
+        else:
+            logger.info("Удаление данных выключено")
+        await asyncio.gather(*loops)
     finally:
+        if bot is not None:
+            await bot.session.close()
         metrics_server.shutdown()
         await dispose_engine()
         logger.info("Воркер остановлен")

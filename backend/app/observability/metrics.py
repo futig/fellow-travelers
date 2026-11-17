@@ -3,7 +3,9 @@
 Идентификаторов и значений из пути (invite-код, uuid) в лейблах нет: `route` — шаблон маршрута,
 `method` — из списка стандартных методов, `status` — число, остальные лейблы — значения
 закрытых `StrEnum` (триггер и вид размещения ниже, `AuditReason`, `JobKind`, `JobOutcome`,
-`JobStatus`). Иначе число рядов росло бы без границы.
+`JobStatus`, `FlightPollOutcome`, `NotificationKind`, `NotificationOutcome`,
+`PlannedOutcome`). Иначе число рядов
+росло бы без границы.
 
 Счётчики подбора и воркера обновляются после commit (см. `app.observability.deferred`), поэтому
 откатившийся сценарий их не меняет.
@@ -78,6 +80,54 @@ worker_job_duration_seconds = Histogram(
     "ft_worker_job_duration_seconds",
     "Длительность попытки выполнить фоновое задание, секунды",
     ["kind"],
+)
+
+
+class FlightPollOutcome(StrEnum):
+    """Чем кончился опрос одного рейса у поставщика."""
+
+    CHANGED = "changed"
+    UNCHANGED = "unchanged"
+    MISSING = "missing"
+    UNAVAILABLE = "unavailable"
+    ERROR = "error"
+
+
+flight_polls_total = Counter(
+    "ft_flight_polls_total",
+    "Опросы рейсов у поставщика по исходу",
+    ["outcome"],
+)
+
+
+class NotificationOutcome(StrEnum):
+    """Чем кончилась попытка отправить уведомление."""
+
+    SENT = "sent"
+    SKIPPED = "skipped"
+    RETRIED = "retried"
+    FAILED = "failed"
+
+
+notifications_total = Counter(
+    "ft_notifications_total",
+    "Попытки отправить уведомление в Telegram по виду (NotificationKind) и исходу",
+    ["kind", "outcome"],
+)
+
+
+class PlannedOutcome(StrEnum):
+    """Что стало с новым событием для получателя: новая строка, склейка или отложенная строка."""
+
+    CREATED = "created"
+    MERGED = "merged"
+    DEFERRED = "deferred"
+
+
+notifications_planned_total = Counter(
+    "ft_notifications_planned_total",
+    "Уведомления по исходу записи: создано, склеено с неотправленным, отложено часовым лимитом",
+    ["outcome"],
 )
 worker_queue_depth = Gauge(
     "ft_worker_queue_depth",

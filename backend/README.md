@@ -96,6 +96,45 @@ UPDATE background_jobs SET status = 'pending', attempts = 0, run_after = now() W
 Счётчики растут только после commit: откатившийся пересчёт их не меняет. Healthcheck сервиса
 (`python -m app.worker.healthcheck`) успешен, если последний опрос очереди был не больше 60 секунд назад.
 
+Кроме заданий, воркер ведёт ещё три цикла (MVP):
+
+- **Опрос рейсов поставщика** раз в 30 секунд, если `FLIGHT_PROVIDER` не `none`. Опрашиваются только рейсы с
+  активными заявками; расписание — Д2 в `docs/spec-mvp.md`. Изменения пишутся в историю от `system` и ставят
+  пересчёт трансферов. Доступны `none` (по умолчанию: поиск рейсов отвечает 503), `fake` (тестовый поставщик в
+  памяти, только для разработки) и `aerodatabox` (AeroDataBox; нужны `AERODATABOX_API_KEY` и
+  `AERODATABOX_GATEWAY` = `apimarket`, `direct` или `rapidapi`, по умолчанию `apimarket`; см. `docs/spec-mvp.md`,
+  M-01a). Перед включением проверьте ключ с ВМ: `GET /health/services/airports/UUEE/feeds` (0 единиц).
+- **Отправка уведомлений** через бота раз в 5 секунд. Строки `notifications` создаются при commit изменений.
+  На человека в группе есть не больше одной неотправленной строки (`pending`): новое событие склеивается в
+  неё (другой вид события даёт общий текст «несколько изменений»). Новая строка ждёт 30 секунд, чтобы частые
+  изменения склеились, а после 6 сообщений за час человеку по одной группе следующая откладывается до выхода
+  самого раннего из окна часа (`docs/spec-mvp.md`, M-04a). Воркер арендует строку (`sending`) и ставит `sent`,
+  `skipped` (пользователь не писал боту или заблокировал его) или, после 8 неудач, `failed`; повтор после
+  ошибки остаётся в `sending` с паузой. Воркеру нужны `BOT_TOKEN`, `BOT_USERNAME` и, если ВМ не видит Telegram,
+  `TELEGRAM_RELAY_URL` и `TELEGRAM_RELAY_SECRET` (`docs/telegram-relay.md`). Без настоящего `BOT_TOKEN` воркер
+  работает, но уведомления не отправляет. Метрики — `ft_notifications_total{kind,outcome}` и
+  `ft_notifications_planned_total{outcome}` (`created`, `merged`, `deferred`). Название группы в тексте
+  очищается от ссылок, доменов, `@`, `#`, команд, e-mail и телефонов и обрезается до 60 символов
+  (`notification_text.safe_title`): название задаёт админ, а сообщение приходит от официального бота.
+- **Удаление данных** раз в час, только при `RETENTION_ENABLED=true`. Группа удаляется целиком через 7 суток
+  после самого позднего из моментов: конец дня `ends_on`, последняя отметка «Уехал», создание и последняя
+  правка группы. Удаление необратимо; пользователи
+  остаются.
+
+В проде `FLIGHT_PROVIDER`, `RETENTION_ENABLED`, `AERODATABOX_API_KEY` и `AERODATABOX_GATEWAY` задаются секретами
+репозитория с теми же именами; без секретов действуют `none`, `false`, пустой ключ и `apimarket`. Ключ нужен только
+при `FLIGHT_PROVIDER=aerodatabox` и передаётся только контейнерам `api` и `worker`. Деплой (`.github/workflows/deploy.yml`) подставляет их в
+`deploy/docker-compose.prod.yml` через `envsubst`, поэтому там стоят простые `${FLIGHT_PROVIDER}` и
+`${RETENTION_ENABLED}`: выражения вида `${VAR:-default}` `envsubst` не подставляет. Перед первым включением
+`RETENTION_ENABLED` сделайте дамп БД: удаление необратимо.
+
+```sql
+SELECT status, count(*) FROM notifications GROUP BY status;
+SELECT id, kind, attempts, last_error FROM notifications WHERE status = 'failed' ORDER BY id DESC LIMIT 20;
+-- вернуть в отправку: через sending, чтобы не столкнуться с новой pending того же человека
+UPDATE notifications SET status = 'sending', attempts = 0, run_after = now() WHERE id = ...;
+```
+
 Остановка по SIGTERM или Ctrl+C: текущее задание доводится до конца, затем процесс выходит. Несколько
 экземпляров воркера безопасны: задания делятся через `FOR UPDATE SKIP LOCKED`, а изменения одной группы
 сериализует advisory-блокировка.
@@ -116,9 +155,33 @@ UPDATE background_jobs SET status = 'pending', attempts = 0, run_after = now() W
 **до** revert, пока на ВМ работает новый образ.
 
 1. Сохранить дамп: `sudo docker exec db pg_dump -U fellow -d fellow_travelers | gzip > ~/pre-rollback.sql.gz`.
-2. Откатить схему новым образом до ревизии старого релиза (для релиза с историей и воркером — `0002`):
-   `sudo docker exec api alembic downgrade 0002`. Таблицы `audit_log` и `background_jobs` удаляются вместе
-   с данными: история с момента обновления пропадёт, она остаётся только в дампе.
+2. Откатить схему новым образом до ревизии старого релиза:
+   - релиз MVP → релиз с историей и воркером: `0004`. Сначала остановить `worker` и `bot`
+     (`sudo docker stop worker bot`): новый код пишет историю с причинами MVP до самого revert. Затем у
+     записей истории с причинами MVP обнулить причину: старый код их не знает, а миграция `0005` не вернёт
+     старое ограничение, пока они есть. Строки остаются, поэтому составы трансферов по истории
+     восстанавливаются, как раньше. Таблица истории защищена триггером «только добавление», поэтому на время
+     правки он отключается:
+
+     ```bash
+     sudo docker exec -i db psql -U fellow -d fellow_travelers <<'SQL'
+     BEGIN;
+     ALTER TABLE audit_log DISABLE TRIGGER audit_log_append_only;
+     UPDATE audit_log SET reason = NULL WHERE reason IN
+       ('application_changed', 'departure_undone', 'flight_cancelled', 'provider_update');
+     ALTER TABLE audit_log ENABLE TRIGGER audit_log_append_only;
+     COMMIT;
+     SQL
+     sudo docker exec api alembic downgrade 0004
+     ```
+
+     Если `downgrade` упал на проверке `ck_audit_log_audit_reason` (успела появиться новая запись), схема
+     остаётся прежней: повторите SQL и `downgrade`. Удаляются таблица `notifications` (неотправленные
+     уведомления пропадут), поля опроса рейсов и `applications.departed_from_transfer_id`. Заявки, трансферы
+     и рейсы остаются.
+   - релиз с историей и воркером → pre-MVP: `sudo docker exec api alembic downgrade 0002`. Таблицы
+     `audit_log` и `background_jobs` удаляются вместе с данными: история с момента обновления пропадёт, она
+     остаётся только в дампе.
 3. Сделать revert слияния в `main` и запушить: деплой соберёт и поставит старые образы.
 4. Проверить: `curl -s -o /dev/null -w '%{http_code}' https://<сайт>/api/v1/me` даёт 401, а не 502.
 

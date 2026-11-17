@@ -12,6 +12,7 @@ import time
 from typing import Any
 
 import pytest
+from aiogram.utils.token import TokenValidationError
 from prometheus_client import REGISTRY
 
 import app.worker as worker
@@ -19,6 +20,7 @@ import app.worker.__main__ as worker_main
 from app.config import get_settings
 from app.observability import metrics
 from app.services.jobs import JobOutcome
+from app.services.notification_sender import SendResult
 
 TIMEOUT = 5.0
 SESSION_FACTORY = object()
@@ -283,6 +285,23 @@ async def test_last_poll_is_not_stamped_while_database_is_unreachable(
     assert script.calls == 0
 
 
+def _fake_notifications(monkeypatch: pytest.MonkeyPatch, events: list[str]) -> None:
+    """Бот и цикл отправки подменены: сети нет, видно только порядок запуска и закрытия."""
+
+    class FakeSession:
+        async def close(self) -> None:
+            events.append("bot closed")
+
+    class FakeBot:
+        session = FakeSession()
+
+    async def fake_notifications(stop: asyncio.Event, sender: object) -> None:
+        events.append("notifications")
+
+    monkeypatch.setattr(worker_main, "build_bot", lambda settings: FakeBot())
+    monkeypatch.setattr(worker_main, "run_notification_sender", fake_notifications)
+
+
 async def test_main_starts_metrics_server_runs_worker_and_cleans_up(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -304,6 +323,7 @@ async def test_main_starts_metrics_server_runs_worker_and_cleans_up(
 
     monkeypatch.setattr(worker_main, "start_http_server", start_http_server)
     monkeypatch.setattr(worker_main, "run", fake_run)
+    _fake_notifications(monkeypatch, events)
     monkeypatch.setattr(worker_main, "dispose_engine", fake_dispose)
     monkeypatch.setattr(worker_main, "configure_logging", lambda level: None)
     monkeypatch.setattr(worker_main, "_stop_on_signals", lambda loop, stop: None)
@@ -311,4 +331,292 @@ async def test_main_starts_metrics_server_runs_worker_and_cleans_up(
     await worker_main.main()
 
     port = get_settings().worker_metrics_port
-    assert events == [f"server start {port}", "run", "server shutdown", "dispose"]
+    assert events == [
+        f"server start {port}",
+        "run",
+        "notifications",
+        "bot closed",
+        "server shutdown",
+        "dispose",
+    ]
+
+
+# ---------------------------------------------------------------- опрос рейсов
+
+
+class PollScript:
+    """Подмена `poll_due_trips`: считает проходы и запоминает, что получила."""
+
+    def __init__(self, error: Exception | None = None) -> None:
+        self.calls = 0
+        self.error = error
+        self.seen: list[tuple[object, object, asyncio.Event | None]] = []
+
+    async def __call__(
+        self,
+        session_factory: Any,
+        provider: Any,
+        *,
+        stop: asyncio.Event | None = None,
+    ) -> None:
+        self.calls += 1
+        self.seen.append((session_factory, provider, stop))
+        if self.error is not None:
+            raise self.error
+
+
+async def _wait_calls(script: PollScript, count: int) -> None:
+    for _ in range(300):
+        if script.calls >= count:
+            return
+        await asyncio.sleep(0.01)
+
+
+async def test_flight_polling_loop_polls_repeatedly_and_stops(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    script = PollScript()
+    provider: Any = object()
+    monkeypatch.setattr(worker, "poll_due_trips", script)
+    stop = asyncio.Event()
+    task = asyncio.ensure_future(worker.run_flight_polling(stop, provider, interval=0.01))
+
+    await _wait_calls(script, 3)
+    stop.set()
+    await asyncio.wait_for(task, TIMEOUT)
+
+    assert script.calls >= 3
+    assert script.seen[0] == (SESSION_FACTORY, provider, stop)
+
+
+async def test_flight_polling_loop_survives_errors(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    script = PollScript(error=ConnectionRefusedError("db is down"))
+    monkeypatch.setattr(worker, "poll_due_trips", script)
+    caplog.set_level(logging.ERROR)
+    stop = asyncio.Event()
+    provider: Any = object()
+    task = asyncio.ensure_future(worker.run_flight_polling(stop, provider, interval=0.01))
+
+    await _wait_calls(script, 3)
+    assert not task.done()
+    stop.set()
+    await asyncio.wait_for(task, TIMEOUT)
+
+    assert script.calls >= 3
+    assert any(r.levelno == logging.ERROR for r in caplog.records)
+
+
+async def test_flight_polling_loop_exits_at_once_when_stopped(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    script = PollScript()
+    monkeypatch.setattr(worker, "poll_due_trips", script)
+    stop = asyncio.Event()
+    stop.set()
+    provider: Any = object()
+
+    await asyncio.wait_for(worker.run_flight_polling(stop, provider), TIMEOUT)
+
+    assert script.calls == 0
+
+
+async def _run_main(
+    monkeypatch: pytest.MonkeyPatch,
+    provider: object | None,
+    bot_builder: Any = None,
+) -> list[str]:
+    events: list[str] = []
+
+    class FakeServer:
+        def shutdown(self) -> None:
+            pass
+
+    async def fake_run(stop: asyncio.Event) -> None:
+        events.append("run")
+
+    async def fake_polling(stop: asyncio.Event, given: object) -> None:
+        events.append("polling")
+        assert given is provider
+
+    async def fake_dispose() -> None:
+        pass
+
+    monkeypatch.setattr(worker_main, "start_http_server", lambda port: (FakeServer(), object()))
+    monkeypatch.setattr(worker_main, "run", fake_run)
+    _fake_notifications(monkeypatch, events)
+    monkeypatch.setattr(worker_main, "run_flight_polling", fake_polling)
+    if bot_builder is not None:
+        monkeypatch.setattr(worker_main, "build_bot", bot_builder)
+    monkeypatch.setattr(worker_main, "build_provider", lambda settings: provider)
+    monkeypatch.setattr(worker_main, "dispose_engine", fake_dispose)
+    monkeypatch.setattr(worker_main, "configure_logging", lambda level: None)
+    monkeypatch.setattr(worker_main, "_stop_on_signals", lambda loop, stop: None)
+
+    await worker_main.main()
+    return events
+
+
+async def test_main_starts_flight_polling_when_provider_is_configured(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    events = await _run_main(monkeypatch, object())
+
+    assert sorted(events) == ["bot closed", "notifications", "polling", "run"]
+
+
+async def test_main_skips_flight_polling_without_provider(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    caplog.set_level(logging.INFO)
+
+    events = await _run_main(monkeypatch, None)
+
+    assert sorted(events) == ["bot closed", "notifications", "run"]
+    assert any(
+        r.name == "app.worker" and r.levelno == logging.INFO and "опрос рейсов" in r.getMessage()
+        for r in caplog.records
+    )
+
+
+async def test_main_survives_malformed_bot_token_without_notifications(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    secret = "not-a-token-SECRET"
+    caplog.set_level(logging.INFO)
+
+    def failing_build_bot(settings: object) -> object:
+        raise TokenValidationError(f"Token is invalid! {secret}")
+
+    events = await _run_main(monkeypatch, object(), bot_builder=failing_build_bot)
+
+    assert sorted(events) == ["polling", "run"]
+    warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
+    assert [r.getMessage() for r in warnings] == [
+        "Уведомления не отправляются: BOT_TOKEN не похож на токен Telegram"
+    ]
+    assert secret not in caplog.text
+
+
+# ---------------------------------------------------------------- отправка уведомлений
+
+
+class SendScript:
+    """Подмена `send_due`: считает проходы, запоминает аргументы, отдаёт заготовленный итог."""
+
+    def __init__(self, result: SendResult | None = None, error: Exception | None = None) -> None:
+        self.calls = 0
+        self.result = result or SendResult()
+        self.error = error
+        self.seen: list[tuple[object, object, asyncio.Event | None]] = []
+
+    async def __call__(
+        self,
+        session_factory: Any,
+        sender: Any,
+        *,
+        batch: int,
+        stop: asyncio.Event | None = None,
+    ) -> SendResult:
+        self.calls += 1
+        self.seen.append((session_factory, sender, stop))
+        await asyncio.sleep(0)  # как настоящий проход: отдаёт управление циклу событий
+        if self.error is not None:
+            raise self.error
+        return self.result
+
+
+async def test_notification_loop_sends_repeatedly_and_stops(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    script = SendScript()
+    sender: Any = object()
+    monkeypatch.setattr(worker, "send_due", script)
+    stop = asyncio.Event()
+    task = asyncio.ensure_future(worker.run_notification_sender(stop, sender, interval=0.01))
+
+    for _ in range(300):
+        if script.calls >= 3:
+            break
+        await asyncio.sleep(0.01)
+    assert not task.done()
+    stop.set()
+    await asyncio.wait_for(task, TIMEOUT)
+
+    assert script.calls >= 3
+    assert script.seen[0] == (SESSION_FACTORY, sender, stop)
+
+
+async def test_notification_loop_exits_at_once_when_stopped(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    script = SendScript()
+    monkeypatch.setattr(worker, "send_due", script)
+    stop = asyncio.Event()
+    stop.set()
+    sender: Any = object()
+
+    await asyncio.wait_for(worker.run_notification_sender(stop, sender), TIMEOUT)
+
+    assert script.calls == 0
+
+
+async def test_notification_loop_continues_at_once_after_a_full_batch(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    script = SendScript(result=SendResult(sent=worker.NOTIFICATION_BATCH))
+    monkeypatch.setattr(worker, "send_due", script)
+    stop = asyncio.Event()
+    sender: Any = object()
+    task = asyncio.ensure_future(worker.run_notification_sender(stop, sender, interval=60))
+
+    for _ in range(300):
+        if script.calls >= 3:
+            break
+        await asyncio.sleep(0.001)
+    stop.set()
+    await asyncio.wait_for(task, TIMEOUT)
+
+    assert script.calls >= 3  # пауза в 60 с не наступила: очередь не пуста
+
+
+async def test_notification_loop_survives_errors_without_leaking_details(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    script = SendScript(error=ConnectionRefusedError("secret-detail"))
+    monkeypatch.setattr(worker, "send_due", script)
+    caplog.set_level(logging.ERROR)
+    stop = asyncio.Event()
+    sender: Any = object()
+    task = asyncio.ensure_future(worker.run_notification_sender(stop, sender, interval=0.01))
+
+    for _ in range(300):
+        if script.calls >= 3:
+            break
+        await asyncio.sleep(0.01)
+    assert not task.done()
+    stop.set()
+    await asyncio.wait_for(task, TIMEOUT)
+
+    assert script.calls >= 3
+    errors = [r for r in caplog.records if r.levelno == logging.ERROR]
+    assert errors
+    assert all("secret-detail" not in r.getMessage() for r in errors)
+    assert all("ConnectionRefusedError" in r.getMessage() for r in errors)
+
+
+async def test_notification_loop_waits_retry_after_before_next_pass(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    script = SendScript(result=SendResult(retried=1, pause_seconds=60.0))
+    monkeypatch.setattr(worker, "send_due", script)
+    stop = asyncio.Event()
+    sender: Any = object()
+    task = asyncio.ensure_future(worker.run_notification_sender(stop, sender, interval=0.01))
+
+    await asyncio.sleep(0.3)  # интервал 0.01 с дал бы десятки проходов
+    stop.set()
+    await asyncio.wait_for(task, TIMEOUT)
+
+    assert script.calls == 1
