@@ -1,126 +1,137 @@
-services:
-  db:
-    container_name: db
-    image: postgres:16.15-alpine
-    environment:
-      POSTGRES_USER: fellow
-      POSTGRES_PASSWORD_FILE: /run/secrets/password
-      POSTGRES_DB: fellow_travelers
-    volumes:
-      - pgdata:/var/lib/postgresql/data
-      - /var/lib/fellow-travelers/secrets/${SECRETS_RELEASE}/db:/run/secrets:ro
-    restart: always
+version: "3.8"
 
+x-rolling: &rolling
+  replicas: 2
+  update_config:
+    parallelism: 1
+    delay: 10s
+    order: start-first
+    monitor: 45s
+    failure_action: rollback
+    max_failure_ratio: 0
+  rollback_config:
+    parallelism: 1
+    order: start-first
+    monitor: 30s
+    failure_action: pause
+  restart_policy:
+    condition: any
+    delay: 5s
+
+services:
   api:
-    container_name: api
     image: "${API_IMAGE}"
-    command: >
-      sh -c "alembic upgrade head
-      && python -m app.seeds.locations
-      && uvicorn app.main:app --host 0.0.0.0 --port 8000 --no-access-log"
+    labels:
+      com.fellow-travelers.release: "${SECRETS_RELEASE}"
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --no-access-log --timeout-graceful-shutdown 45
     environment:
       APP_SECRETS_DIR: /run/secrets
       BOT_USERNAME: "${BOT_USERNAME}"
-      INIT_DATA_MAX_AGE_SECONDS: ${INIT_DATA_MAX_AGE_SECONDS}
+      INIT_DATA_MAX_AGE_SECONDS: "${INIT_DATA_MAX_AGE_SECONDS}"
       DEBUG: "${DEBUG}"
       LOG_LEVEL: "${LOG_LEVEL:-INFO}"
       WORKER_METRICS_PORT: "${WORKER_METRICS_PORT:-9100}"
     volumes:
       - /var/lib/fellow-travelers/secrets/${SECRETS_RELEASE}/api:/run/secrets:ro
-    depends_on:
-      - db
-    restart: always
+    networks: [private]
+    stop_grace_period: 60s
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/readyz', timeout=4).read()"]
+      interval: 5s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    deploy: *rolling
+
+  web:
+    image: "${WEB_IMAGE}"
+    labels:
+      com.fellow-travelers.release: "${SECRETS_RELEASE}"
+    volumes:
+      - assets:/usr/share/nginx/html/assets:ro
+    networks: [private]
+    stop_grace_period: 30s
+    healthcheck:
+      test: [CMD, wget, -q, -O, /dev/null, "http://127.0.0.1/"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+    deploy: *rolling
 
   bot:
-    container_name: bot
     image: "${API_IMAGE}"
+    labels:
+      com.fellow-travelers.release: "${SECRETS_RELEASE}"
     command: python -m app.bot
     environment:
       APP_SECRETS_DIR: /run/secrets
       BOT_USERNAME: "${BOT_USERNAME}"
       TELEGRAM_RELAY_URL: "${TELEGRAM_RELAY_URL}"
-      INIT_DATA_MAX_AGE_SECONDS: ${INIT_DATA_MAX_AGE_SECONDS}
+      INIT_DATA_MAX_AGE_SECONDS: "${INIT_DATA_MAX_AGE_SECONDS}"
       DEBUG: "${DEBUG}"
       LOG_LEVEL: "${LOG_LEVEL:-INFO}"
       WEB_APP_URL: "${SITE_ADDRESS}"
     volumes:
       - /var/lib/fellow-travelers/secrets/${SECRETS_RELEASE}/bot:/run/secrets:ro
-    depends_on:
-      - db
-    restart: always
+    networks: [private]
+    stop_grace_period: 60s
+    deploy:
+      <<: *rolling
+      replicas: 1
+      update_config:
+        parallelism: 1
+        order: stop-first
+        monitor: 45s
+        failure_action: rollback
+      rollback_config:
+        parallelism: 1
+        order: stop-first
+        monitor: 30s
+        failure_action: pause
 
   worker:
-    container_name: worker
     image: "${API_IMAGE}"
+    labels:
+      com.fellow-travelers.release: "${SECRETS_RELEASE}"
     command: python -m app.worker
     environment:
       APP_SECRETS_DIR: /run/secrets
       BOT_USERNAME: "${BOT_USERNAME}"
-      INIT_DATA_MAX_AGE_SECONDS: ${INIT_DATA_MAX_AGE_SECONDS}
+      INIT_DATA_MAX_AGE_SECONDS: "${INIT_DATA_MAX_AGE_SECONDS}"
       DEBUG: "${DEBUG}"
       LOG_LEVEL: "${LOG_LEVEL:-INFO}"
       WORKER_METRICS_PORT: "${WORKER_METRICS_PORT:-9100}"
     volumes:
       - /var/lib/fellow-travelers/secrets/${SECRETS_RELEASE}/api:/run/secrets:ro
-    depends_on:
-      - db
-    # метрики воркера на порту 9100 доступны только внутри сети compose
+    networks: [private]
+    stop_grace_period: 60s
     healthcheck:
-      test: ["CMD", "python", "-m", "app.worker.healthcheck"]
+      test: [CMD, python, -m, app.worker.healthcheck]
       interval: 30s
       timeout: 5s
       retries: 3
       start_period: 20s
-    restart: always
+    deploy:
+      <<: *rolling
+      replicas: 1
+      update_config:
+        parallelism: 1
+        order: stop-first
+        monitor: 60s
+        failure_action: rollback
+      rollback_config:
+        parallelism: 1
+        order: stop-first
+        monitor: 30s
+        failure_action: pause
 
-  web:
-    container_name: web
-    image: "${WEB_IMAGE}"
-    depends_on:
-      - api
-    restart: always
-
-  caddy:
-    container_name: caddy
-    image: "${CADDY_IMAGE}"
-    environment:
-      SITE_ADDRESS: "${SITE_ADDRESS}"
-      ACME_EMAIL: "${ACME_EMAIL}"
-      ACME_CA: "${ACME_CA}"
-    ports:
-      - "80:80"
-      - "443:443"
-      - "443:443/udp"
-    volumes:
-      - caddy_data:/data
-      - caddy_config:/config
-    depends_on:
-      - web
-    restart: always
-
-  backup:
-    container_name: backup
-    image: postgres:16.15-alpine
-    entrypoint: ["/bin/sh", "-c"]
-    command:
-      - |
-        while true; do
-          pg_dump -h db -U fellow -d fellow_travelers | gzip > /backups/day$$(date +%u).sql.gz \
-            && echo "backup done: day$$(date +%u)" \
-            || echo "backup FAILED"
-          sleep 86400
-        done
-    environment:
-      PGPASSFILE: /run/secrets/pgpass
-    volumes:
-      - backups:/backups
-      - /var/lib/fellow-travelers/secrets/${SECRETS_RELEASE}/backup:/run/secrets:ro
-    depends_on:
-      - db
-    restart: always
+networks:
+  private:
+    external: true
+    name: fellow-private
 
 volumes:
-  pgdata:
-  caddy_data:
-  caddy_config:
-  backups:
+  assets:
+    external: true
+    name: fellow-assets

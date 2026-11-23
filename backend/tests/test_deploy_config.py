@@ -13,6 +13,7 @@ import yaml
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
 PROD_COMPOSE = BACKEND_DIR.parent / "deploy" / "docker-compose.prod.yml"
+INFRA_COMPOSE = BACKEND_DIR.parent / "deploy" / "docker-compose.infra.yml"
 REPO_DIR = BACKEND_DIR.parent
 DEV_COMPOSE = REPO_DIR / "docker-compose.yml"
 DOCKERFILES = (
@@ -163,7 +164,9 @@ def test_every_dockerfile_base_image_has_an_exact_version(path: Path) -> None:
         assert _is_exact(image), f"{path.name}: {image} без точной версии"
 
 
-@pytest.mark.parametrize("path", [DEV_COMPOSE, PROD_COMPOSE], ids=["dev", "prod"])
+@pytest.mark.parametrize(
+    "path", [DEV_COMPOSE, PROD_COMPOSE, INFRA_COMPOSE], ids=["dev", "prod", "infra"]
+)
 def test_every_compose_image_has_an_exact_version(path: Path) -> None:
     compose: dict[str, Any] = yaml.safe_load(path.read_text(encoding="utf-8"))
     checked = []
@@ -176,7 +179,8 @@ def test_every_compose_image_has_an_exact_version(path: Path) -> None:
         assert _is_exact(image), f"{path.name}: {name} использует {image}"
         checked.append(name)
 
-    assert "db" in checked
+    if path == DEV_COMPOSE:
+        assert "db" in checked
 
 
 PIP_INSTALL = re.compile(r"""\bpip\d*["']?\s+install\b""")

@@ -139,23 +139,32 @@ def test_production_spec_has_only_secret_paths() -> None:
         environment = compose["services"][service]["environment"]
         assert environment["APP_SECRETS_DIR"] == "/run/secrets"
         assert not {"DATABASE_URL", "BOT_TOKEN", "TELEGRAM_RELAY_SECRET"} & environment.keys()
-    for service in ("db", "api", "bot", "worker", "backup"):
+    for service in ("api", "bot", "worker"):
         assert any(
             "${SECRETS_RELEASE}" in volume and volume.endswith(":ro")
             for volume in compose["services"][service]["volumes"]
         )
-    assert compose["services"]["db"]["environment"]["POSTGRES_PASSWORD_FILE"] == (
+    infra_text = (REPO / "deploy/docker-compose.infra.yml").read_text()
+    infra = yaml.safe_load(infra_text)
+    for variable in ("BOT_TOKEN", "POSTGRES_PASSWORD", "TELEGRAM_RELAY_SECRET"):
+        assert "${" + variable + "}" not in infra_text
+    for service in ("db", "backup"):
+        assert any(
+            "${INFRA_SECRETS_RELEASE}" in volume and volume.endswith(":ro")
+            for volume in infra["services"][service]["volumes"]
+        )
+    assert infra["services"]["db"]["environment"]["POSTGRES_PASSWORD_FILE"] == (
         "/run/secrets/password"
     )
-    assert compose["services"]["backup"]["environment"] == {"PGPASSFILE": "/run/secrets/pgpass"}
+    assert infra["services"]["backup"]["environment"] == {"PGPASSFILE": "/run/secrets/pgpass"}
 
 
-def test_metadata_render_step_cannot_receive_secret_values() -> None:
+def test_swarm_deploy_step_cannot_receive_application_secret_values() -> None:
     workflow = yaml.safe_load((REPO / ".github/workflows/deploy.yml").read_text())
     steps = workflow["jobs"]["deploy"]["steps"]
-    render = next(step for step in steps if step.get("name") == "Собрать спецификацию контейнеров")
-    assert not set(PAYLOAD) & render["env"].keys()
-    assert not any(name in render["run"] for name in PAYLOAD)
+    deploy = next(step for step in steps if step.get("id") == "update_swarm")
+    assert not set(PAYLOAD) & deploy["env"].keys()
+    assert not any(name in deploy["run"] for name in PAYLOAD)
     upload_index = next(i for i, step in enumerate(steps) if step.get("id") == "upload_secrets")
-    update_index = next(i for i, step in enumerate(steps) if step.get("id") == "update_coi")
+    update_index = next(i for i, step in enumerate(steps) if step.get("id") == "update_swarm")
     assert upload_index < update_index

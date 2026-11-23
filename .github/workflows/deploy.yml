@@ -10,9 +10,17 @@ on:
       - .github/workflows/deploy.yml
       - .github/scripts/**
   workflow_dispatch:
+    inputs:
+      action:
+        description: Application deployment or rollback to the preceding successful release
+        type: choice
+        options: [deploy, rollback]
+        default: deploy
+      update_infra:
+        description: Also update infrastructure (Caddy/config); may interrupt HTTPS briefly
+        type: boolean
+        default: false
 
-# на уровне workflow, вместе с CI: деплои идут в порядке пушей, а ожидающий запуск заменяется более
-# новым. На уровне job старый коммит мог бы задеплоиться после нового, если его CI закончился позже.
 concurrency:
   group: deploy
   cancel-in-progress: false
@@ -22,69 +30,14 @@ permissions:
 
 jobs:
   tests:
+    if: inputs.action != 'rollback'
     uses: ./.github/workflows/ci.yml
 
-  changes:
-    runs-on: ubuntu-latest
-    outputs:
-      backend: ${{ steps.filter.outputs.backend }}
-      frontend: ${{ steps.filter.outputs.frontend }}
-      caddy: ${{ steps.filter.outputs.caddy }}
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-        with:
-          fetch-depth: 0
-      - id: filter
-        name: Определить изменённые компоненты
-        env:
-          EVENT_NAME: ${{ github.event_name }}
-          BEFORE: ${{ github.event.before }}
-          SHA: ${{ github.sha }}
-        run: |
-          backend=false
-          frontend=false
-          caddy=false
-          if [ "$EVENT_NAME" = "workflow_dispatch" ] || \
-             ! git diff --quiet "$BEFORE" "$SHA" -- .github/workflows/deploy.yml; then
-            backend=true
-            frontend=true
-            caddy=true
-          else
-            git diff --quiet "$BEFORE" "$SHA" -- 'backend/**' || backend=true
-            git diff --quiet "$BEFORE" "$SHA" -- 'frontend/**' || frontend=true
-            git diff --quiet "$BEFORE" "$SHA" -- 'deploy/caddy/**' || caddy=true
-          fi
-          {
-            echo "backend=$backend"
-            echo "frontend=$frontend"
-            echo "caddy=$caddy"
-          } >> "$GITHUB_OUTPUT"
-      - name: Вывести результат
-        if: always()
-        env:
-          BACKEND_CHANGED: ${{ steps.filter.outputs.backend }}
-          FRONTEND_CHANGED: ${{ steps.filter.outputs.frontend }}
-          CADDY_CHANGED: ${{ steps.filter.outputs.caddy }}
-        run: |
-          backend=Нет
-          frontend=Нет
-          caddy=Нет
-          if [ "$BACKEND_CHANGED" = "true" ]; then backend=Да; fi
-          if [ "$FRONTEND_CHANGED" = "true" ]; then frontend=Да; fi
-          if [ "$CADDY_CHANGED" = "true" ]; then caddy=Да; fi
-          {
-            echo '## Необходимость сборки'
-            echo
-            echo '| Компонент | Нужна сборка |'
-            echo '| --- | --- |'
-            echo "| api и bot | $backend |"
-            echo "| web | $frontend |"
-            echo "| caddy | $caddy |"
-          } >> "$GITHUB_STEP_SUMMARY"
-
   deploy:
-    needs: [tests, changes]
+    needs: tests
+    if: always() && (needs.tests.result == 'success' || inputs.action == 'rollback')
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
@@ -100,24 +53,26 @@ jobs:
           POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
           SITE_ADDRESS: ${{ secrets.SITE_ADDRESS }}
           ACME_EMAIL: ${{ secrets.ACME_EMAIL }}
+          SWARM_ACTION: ${{ inputs.action || 'deploy' }}
         run: |
           missing=""
-          for name in YC_SA_KEY YC_REGISTRY_ID YC_VM_ID \
-                      YC_VM_SSH_KEY YC_VM_SSH_KNOWN_HOSTS \
-                      BOT_TOKEN BOT_USERNAME POSTGRES_PASSWORD SITE_ADDRESS ACME_EMAIL; do
+          required="YC_SA_KEY YC_REGISTRY_ID YC_VM_ID YC_VM_SSH_KEY YC_VM_SSH_KNOWN_HOSTS"
+          if [ "$SWARM_ACTION" != "rollback" ]; then
+            required="$required BOT_TOKEN BOT_USERNAME POSTGRES_PASSWORD SITE_ADDRESS ACME_EMAIL"
+          fi
+          for name in $required; do
             [ -n "${!name}" ] || missing="$missing $name"
           done
           if [ -n "$missing" ]; then
-            echo "::error::не заданы секреты репозитория:$missing (см. docs/deploy.md, шаг 4)"
+            echo "::error::не заданы секреты репозитория:$missing"
             exit 1
           fi
           case "$POSTGRES_PASSWORD" in
-            *[!A-Za-z0-9]*)
-              echo "::error::POSTGRES_PASSWORD должен состоять только из букв и цифр: он подставляется в DATABASE_URL"
-              exit 1 ;;
+            *[!A-Za-z0-9]*) echo "::error::POSTGRES_PASSWORD должен быть буквенно-цифровым"; exit 1 ;;
           esac
 
       - name: Проверить Telegram relay
+        if: inputs.action != 'rollback'
         env:
           TELEGRAM_RELAY_URL: ${{ secrets.TELEGRAM_RELAY_URL }}
           TELEGRAM_RELAY_SECRET: ${{ secrets.TELEGRAM_RELAY_SECRET }}
@@ -125,6 +80,7 @@ jobs:
         run: python3 .github/scripts/check-telegram-relay.py
 
       - name: Проверить Caddyfile
+        if: inputs.update_infra
         run: |
           docker run --rm -v "$PWD/deploy/caddy:/etc/caddy:ro" \
             -e SITE_ADDRESS=":80" -e ACME_EMAIL="ci@example.com" \
@@ -132,6 +88,7 @@ jobs:
             caddy:2.11.7-alpine caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
 
       - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
+        if: inputs.action != 'rollback'
 
       - name: Получить IAM-токен и войти в реестр
         env:
@@ -148,48 +105,38 @@ jobs:
           echo "IAM_TOKEN=$token" >> "$GITHUB_ENV"
           printf '%s' "$token" | docker login --username iam --password-stdin cr.yandex
 
-      - id: build_backend
-        name: Образ бэкенда (api и bot)
-        if: needs.changes.outputs.backend == 'true'
+      - name: Образ бэкенда
+        if: inputs.action != 'rollback'
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
         with:
           context: ./backend
           push: true
-          # latest нужен неизменным компонентам в спецификации как fallback на текущий образ.
-          tags: |
-            cr.yandex/${{ secrets.YC_REGISTRY_ID }}/api:${{ github.sha }}
-            cr.yandex/${{ secrets.YC_REGISTRY_ID }}/api:latest
+          tags: cr.yandex/${{ secrets.YC_REGISTRY_ID }}/api:${{ github.sha }}
           provenance: false
           sbom: false
           cache-from: type=gha,scope=api
           cache-to: type=gha,mode=max,scope=api
 
-      - id: build_web
-        name: Образ мини-приложения
-        if: needs.changes.outputs.frontend == 'true'
+      - name: Образ мини-приложения
+        if: inputs.action != 'rollback'
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
         with:
           context: ./frontend
           build-args: VITE_BOT_USERNAME=${{ secrets.BOT_USERNAME }}
           push: true
-          tags: |
-            cr.yandex/${{ secrets.YC_REGISTRY_ID }}/web:${{ github.sha }}
-            cr.yandex/${{ secrets.YC_REGISTRY_ID }}/web:latest
+          tags: cr.yandex/${{ secrets.YC_REGISTRY_ID }}/web:${{ github.sha }}
           provenance: false
           sbom: false
           cache-from: type=gha,scope=web
           cache-to: type=gha,mode=max,scope=web
 
-      - id: build_caddy
-        name: Образ Caddy
-        if: needs.changes.outputs.caddy == 'true'
+      - name: Образ Caddy
+        if: inputs.update_infra && inputs.action != 'rollback'
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
         with:
           context: ./deploy/caddy
           push: true
-          tags: |
-            cr.yandex/${{ secrets.YC_REGISTRY_ID }}/caddy:${{ github.sha }}
-            cr.yandex/${{ secrets.YC_REGISTRY_ID }}/caddy:latest
+          tags: cr.yandex/${{ secrets.YC_REGISTRY_ID }}/caddy:${{ github.sha }}
           provenance: false
           sbom: false
           cache-from: type=gha,scope=caddy
@@ -218,17 +165,21 @@ jobs:
 
       - id: upload_secrets
         name: Передать секреты на ВМ
+        if: inputs.action != 'rollback'
         env:
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
           POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
           TELEGRAM_RELAY_SECRET: ${{ secrets.TELEGRAM_RELAY_SECRET }}
         run: python3 .github/scripts/upload-runtime-secrets.py
 
-      - name: Собрать спецификацию контейнеров
+      - id: update_swarm
+        name: Выполнить rolling update и проверить релиз
         env:
-          API_IMAGE: cr.yandex/${{ secrets.YC_REGISTRY_ID }}/api:${{ needs.changes.outputs.backend == 'true' && github.sha || 'latest' }}
-          WEB_IMAGE: cr.yandex/${{ secrets.YC_REGISTRY_ID }}/web:${{ needs.changes.outputs.frontend == 'true' && github.sha || 'latest' }}
-          CADDY_IMAGE: cr.yandex/${{ secrets.YC_REGISTRY_ID }}/caddy:${{ needs.changes.outputs.caddy == 'true' && github.sha || 'latest' }}
+          SWARM_ACTION: ${{ inputs.action || 'deploy' }}
+          UPDATE_INFRA: ${{ inputs.update_infra || 'false' }}
+          API_IMAGE: cr.yandex/${{ secrets.YC_REGISTRY_ID }}/api:${{ github.sha }}
+          WEB_IMAGE: cr.yandex/${{ secrets.YC_REGISTRY_ID }}/web:${{ github.sha }}
+          CADDY_IMAGE: ${{ inputs.update_infra && format('cr.yandex/{0}/caddy:{1}', secrets.YC_REGISTRY_ID, github.sha) || '' }}
           BOT_USERNAME: ${{ secrets.BOT_USERNAME }}
           TELEGRAM_RELAY_URL: ${{ secrets.TELEGRAM_RELAY_URL }}
           SITE_ADDRESS: ${{ secrets.SITE_ADDRESS }}
@@ -236,58 +187,7 @@ jobs:
           ACME_CA: ${{ secrets.ACME_CA || 'https://acme-v02.api.letsencrypt.org/directory' }}
           INIT_DATA_MAX_AGE_SECONDS: ${{ secrets.INIT_DATA_MAX_AGE_SECONDS || '86400' }}
           DEBUG: ${{ secrets.DEBUG || 'false' }}
-        run: |
-          # список переменных явный: $$(date +%u) в сервисе backup подставлять нельзя
-          envsubst '${API_IMAGE} ${WEB_IMAGE} ${CADDY_IMAGE} ${SECRETS_RELEASE} ${BOT_USERNAME}
-                    ${TELEGRAM_RELAY_URL} ${SITE_ADDRESS} ${ACME_EMAIL} ${ACME_CA}
-                    ${INIT_DATA_MAX_AGE_SECONDS} ${DEBUG}' \
-            < deploy/docker-compose.prod.yml > "$RUNNER_TEMP/spec.yml"
-          docker compose -f "$RUNNER_TEMP/spec.yml" config --quiet
-
-      - id: update_coi
-        name: Обновить контейнеры на ВМ
-        env:
-          YC_VM_ID: ${{ secrets.YC_VM_ID }}
-        run: |
-          jq -n --rawfile spec "$RUNNER_TEMP/spec.yml" '{upsert: {"docker-compose": $spec}}' \
-            > "$RUNNER_TEMP/metadata.json"
-          operation=$(curl -sS --fail-with-body -X POST \
-            -H "Authorization: Bearer $IAM_TOKEN" \
-            -H "Content-Type: application/json" \
-            -d @"$RUNNER_TEMP/metadata.json" \
-            "https://compute.api.cloud.yandex.net/compute/v1/instances/$YC_VM_ID/updateMetadata" \
-            | jq -r .id)
-          echo "операция: $operation"
-          for i in $(seq 1 30); do
-            result=$(curl -sS -H "Authorization: Bearer $IAM_TOKEN" \
-              "https://operation.api.cloud.yandex.net/operations/$operation")
-            if [ "$(echo "$result" | jq -r '.done // false')" = "true" ]; then
-              error=$(echo "$result" | jq -r '.error.message // empty')
-              if [ -n "$error" ]; then echo "::error::$error"; exit 1; fi
-              echo "спецификация обновлена"; exit 0
-            fi
-            sleep 5
-          done
-          echo "::error::операция не завершилась за 150 секунд"; exit 1
-
-      - id: healthcheck
-        name: Проверить, что сайт отвечает
-        continue-on-error: true
-        env:
-          YC_VM_ID: ${{ secrets.YC_VM_ID }}
-        run: |
-          ip=$(curl -sS -H "Authorization: Bearer $IAM_TOKEN" \
-            "https://compute.api.cloud.yandex.net/compute/v1/instances/$YC_VM_ID" \
-            | jq -r '.networkInterfaces[0].primaryV4Address.oneToOneNat.address')
-          echo "Публичный IP: $ip"
-          for i in $(seq 1 30); do
-            code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 "http://$ip/" || true)
-            if [ "$code" != "000" ] && [ "$code" -lt 500 ]; then
-              echo "Ответ HTTP $code"; exit 0
-            fi
-            sleep 10
-          done
-          echo "::warning::сайт не ответил за 5 минут"
+        run: python3 .github/scripts/run-swarm.py
 
       - name: Удалить временные учётные данные runner
         if: always()
@@ -304,34 +204,10 @@ jobs:
       - name: Вывести результат
         if: always()
         env:
-          BACKEND_CHANGED: ${{ needs.changes.outputs.backend }}
-          FRONTEND_CHANGED: ${{ needs.changes.outputs.frontend }}
-          CADDY_CHANGED: ${{ needs.changes.outputs.caddy }}
-          BACKEND_BUILD_OUTCOME: ${{ steps.build_backend.outcome }}
-          WEB_BUILD_OUTCOME: ${{ steps.build_web.outcome }}
-          CADDY_BUILD_OUTCOME: ${{ steps.build_caddy.outcome }}
-          COI_UPDATE_OUTCOME: ${{ steps.update_coi.outcome }}
-          SECRETS_UPLOAD_OUTCOME: ${{ steps.upload_secrets.outcome }}
-          HEALTHCHECK_OUTCOME: ${{ steps.healthcheck.outcome }}
+          DEPLOY_OUTCOME: ${{ steps.update_swarm.outcome }}
         run: |
-          backend_changed=Нет
-          frontend_changed=Нет
-          caddy_changed=Нет
-          if [ "$BACKEND_CHANGED" = "true" ]; then backend_changed=Да; fi
-          if [ "$FRONTEND_CHANGED" = "true" ]; then frontend_changed=Да; fi
-          if [ "$CADDY_CHANGED" = "true" ]; then caddy_changed=Да; fi
           {
-            echo '## Результат развёртывания'
+            echo '## Rolling update'
             echo
-            echo '| Компонент | Изменён | Результат сборки |'
-            echo '| --- | --- | --- |'
-            echo "| api и bot | $backend_changed | $BACKEND_BUILD_OUTCOME |"
-            echo "| web | $frontend_changed | $WEB_BUILD_OUTCOME |"
-            echo "| caddy | $caddy_changed | $CADDY_BUILD_OUTCOME |"
-            echo
-            echo '| Этап | Результат |'
-            echo '| --- | --- |'
-            echo "| Передача секретов | $SECRETS_UPLOAD_OUTCOME |"
-            echo "| Обновление COI | $COI_UPDATE_OUTCOME |"
-            echo "| Healthcheck | $HEALTHCHECK_OUTCOME |"
+            echo "Результат развёртывания и проверок: **$DEPLOY_OUTCOME**"
           } >> "$GITHUB_STEP_SUMMARY"
