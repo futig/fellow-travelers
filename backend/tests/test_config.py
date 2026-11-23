@@ -1,7 +1,9 @@
+from pathlib import Path
+
 import pytest
 from pydantic import ValidationError
 
-from app.config import Settings
+from app.config import Settings, get_settings
 
 
 @pytest.fixture(autouse=True)
@@ -82,3 +84,27 @@ def test_web_app_url_default_none(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_web_app_url_requires_https(monkeypatch: pytest.MonkeyPatch, raw: str) -> None:
     with pytest.raises(ValidationError, match="WEB_APP_URL"):
         make_web_app_url(monkeypatch, raw)
+
+
+def test_runtime_secret_files(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """Production reads raw values from files, including shell/dotenv metacharacters."""
+    for name in ("DATABASE_URL", "BOT_TOKEN", "TELEGRAM_RELAY_SECRET"):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv("BOT_USERNAME", "test_bot")
+    monkeypatch.setenv("TELEGRAM_RELAY_URL", "https://relay.example.com")
+    monkeypatch.setenv("APP_SECRETS_DIR", str(tmp_path))
+    values = {
+        "database_url": "postgresql+asyncpg://fellow:abc123@db:5432/fellow_travelers",
+        "bot_token": "123:secret",
+        "telegram_relay_secret": "literal-${NOT_AN_ENV_VAR}-'\\\"$",
+    }
+    for name, value in values.items():
+        (tmp_path / name).write_text(value, encoding="utf-8")
+    get_settings.cache_clear()
+    try:
+        settings = get_settings()
+        assert settings.database_url == values["database_url"]
+        assert settings.bot_token.get_secret_value() == values["bot_token"]
+        assert settings.telegram_relay_secret.get_secret_value() == values["telegram_relay_secret"]
+    finally:
+        get_settings.cache_clear()

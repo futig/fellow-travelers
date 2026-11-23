@@ -4,10 +4,11 @@ services:
     image: postgres:16.15-alpine
     environment:
       POSTGRES_USER: fellow
-      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD}"
+      POSTGRES_PASSWORD_FILE: /run/secrets/password
       POSTGRES_DB: fellow_travelers
     volumes:
       - pgdata:/var/lib/postgresql/data
+      - /var/lib/fellow-travelers/secrets/${SECRETS_RELEASE}/db:/run/secrets:ro
     restart: always
 
   api:
@@ -18,13 +19,14 @@ services:
       && python -m app.seeds.locations
       && uvicorn app.main:app --host 0.0.0.0 --port 8000 --no-access-log"
     environment:
-      DATABASE_URL: "postgresql+asyncpg://fellow:${POSTGRES_PASSWORD}@db:5432/fellow_travelers"
-      BOT_TOKEN: "${BOT_TOKEN}"
+      APP_SECRETS_DIR: /run/secrets
       BOT_USERNAME: "${BOT_USERNAME}"
       INIT_DATA_MAX_AGE_SECONDS: ${INIT_DATA_MAX_AGE_SECONDS}
       DEBUG: "${DEBUG}"
       LOG_LEVEL: "${LOG_LEVEL:-INFO}"
       WORKER_METRICS_PORT: "${WORKER_METRICS_PORT:-9100}"
+    volumes:
+      - /var/lib/fellow-travelers/secrets/${SECRETS_RELEASE}/api:/run/secrets:ro
     depends_on:
       - db
     restart: always
@@ -34,15 +36,15 @@ services:
     image: "${API_IMAGE}"
     command: python -m app.bot
     environment:
-      DATABASE_URL: "postgresql+asyncpg://fellow:${POSTGRES_PASSWORD}@db:5432/fellow_travelers"
-      BOT_TOKEN: "${BOT_TOKEN}"
+      APP_SECRETS_DIR: /run/secrets
       BOT_USERNAME: "${BOT_USERNAME}"
       TELEGRAM_RELAY_URL: "${TELEGRAM_RELAY_URL}"
-      TELEGRAM_RELAY_SECRET: "${TELEGRAM_RELAY_SECRET}"
       INIT_DATA_MAX_AGE_SECONDS: ${INIT_DATA_MAX_AGE_SECONDS}
       DEBUG: "${DEBUG}"
       LOG_LEVEL: "${LOG_LEVEL:-INFO}"
       WEB_APP_URL: "${SITE_ADDRESS}"
+    volumes:
+      - /var/lib/fellow-travelers/secrets/${SECRETS_RELEASE}/bot:/run/secrets:ro
     depends_on:
       - db
     restart: always
@@ -52,13 +54,14 @@ services:
     image: "${API_IMAGE}"
     command: python -m app.worker
     environment:
-      DATABASE_URL: "postgresql+asyncpg://fellow:${POSTGRES_PASSWORD}@db:5432/fellow_travelers"
-      BOT_TOKEN: "${BOT_TOKEN}"
+      APP_SECRETS_DIR: /run/secrets
       BOT_USERNAME: "${BOT_USERNAME}"
       INIT_DATA_MAX_AGE_SECONDS: ${INIT_DATA_MAX_AGE_SECONDS}
       DEBUG: "${DEBUG}"
       LOG_LEVEL: "${LOG_LEVEL:-INFO}"
       WORKER_METRICS_PORT: "${WORKER_METRICS_PORT:-9100}"
+    volumes:
+      - /var/lib/fellow-travelers/secrets/${SECRETS_RELEASE}/api:/run/secrets:ro
     depends_on:
       - db
     # метрики воркера на порту 9100 доступны только внутри сети compose
@@ -108,9 +111,10 @@ services:
           sleep 86400
         done
     environment:
-      PGPASSWORD: "${POSTGRES_PASSWORD}"
+      PGPASSFILE: /run/secrets/pgpass
     volumes:
       - backups:/backups
+      - /var/lib/fellow-travelers/secrets/${SECRETS_RELEASE}/backup:/run/secrets:ro
     depends_on:
       - db
     restart: always

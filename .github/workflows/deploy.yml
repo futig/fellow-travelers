@@ -93,6 +93,8 @@ jobs:
           YC_SA_KEY: ${{ secrets.YC_SA_KEY }}
           YC_REGISTRY_ID: ${{ secrets.YC_REGISTRY_ID }}
           YC_VM_ID: ${{ secrets.YC_VM_ID }}
+          YC_VM_SSH_KEY: ${{ secrets.YC_VM_SSH_KEY }}
+          YC_VM_SSH_KNOWN_HOSTS: ${{ secrets.YC_VM_SSH_KNOWN_HOSTS }}
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
           BOT_USERNAME: ${{ secrets.BOT_USERNAME }}
           POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
@@ -101,6 +103,7 @@ jobs:
         run: |
           missing=""
           for name in YC_SA_KEY YC_REGISTRY_ID YC_VM_ID \
+                      YC_VM_SSH_KEY YC_VM_SSH_KNOWN_HOSTS \
                       BOT_TOKEN BOT_USERNAME POSTGRES_PASSWORD SITE_ADDRESS ACME_EMAIL; do
             [ -n "${!name}" ] || missing="$missing $name"
           done
@@ -134,6 +137,7 @@ jobs:
         env:
           YC_SA_KEY: ${{ secrets.YC_SA_KEY }}
         run: |
+          umask 077
           printf '%s' "$YC_SA_KEY" > "$RUNNER_TEMP/sa-key.json"
           python3 -m venv "$RUNNER_TEMP/venv"
           "$RUNNER_TEMP/venv/bin/pip" install --quiet --require-hashes \
@@ -191,16 +195,42 @@ jobs:
           cache-from: type=gha,scope=caddy
           cache-to: type=gha,mode=max,scope=caddy
 
+      - name: Настроить SSH к ВМ
+        env:
+          YC_VM_ID: ${{ secrets.YC_VM_ID }}
+          YC_VM_SSH_KEY: ${{ secrets.YC_VM_SSH_KEY }}
+          YC_VM_SSH_KNOWN_HOSTS: ${{ secrets.YC_VM_SSH_KNOWN_HOSTS }}
+          SSH_USER: ${{ vars.YC_VM_SSH_USER || 'yc-user' }}
+        run: |
+          umask 077
+          mkdir -p "$RUNNER_TEMP/fellow-ssh"
+          printf '%s\n' "$YC_VM_SSH_KEY" > "$RUNNER_TEMP/fellow-ssh/key"
+          printf '%s\n' "$YC_VM_SSH_KNOWN_HOSTS" > "$RUNNER_TEMP/fellow-ssh/known_hosts"
+          ip=$(curl -sS --fail -H "Authorization: Bearer $IAM_TOKEN" \
+            "https://compute.api.cloud.yandex.net/compute/v1/instances/$YC_VM_ID" \
+            | jq -er '.networkInterfaces[0].primaryV4Address.oneToOneNat.address')
+          {
+            echo "SSH_TARGET=$SSH_USER@$ip"
+            echo "SSH_KEY_FILE=$RUNNER_TEMP/fellow-ssh/key"
+            echo "SSH_KNOWN_HOSTS_FILE=$RUNNER_TEMP/fellow-ssh/known_hosts"
+            echo "SECRETS_RELEASE=$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          } >> "$GITHUB_ENV"
+
+      - id: upload_secrets
+        name: Передать секреты на ВМ
+        env:
+          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+          TELEGRAM_RELAY_SECRET: ${{ secrets.TELEGRAM_RELAY_SECRET }}
+        run: python3 .github/scripts/upload-runtime-secrets.py
+
       - name: Собрать спецификацию контейнеров
         env:
           API_IMAGE: cr.yandex/${{ secrets.YC_REGISTRY_ID }}/api:${{ needs.changes.outputs.backend == 'true' && github.sha || 'latest' }}
           WEB_IMAGE: cr.yandex/${{ secrets.YC_REGISTRY_ID }}/web:${{ needs.changes.outputs.frontend == 'true' && github.sha || 'latest' }}
           CADDY_IMAGE: cr.yandex/${{ secrets.YC_REGISTRY_ID }}/caddy:${{ needs.changes.outputs.caddy == 'true' && github.sha || 'latest' }}
-          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
           BOT_USERNAME: ${{ secrets.BOT_USERNAME }}
           TELEGRAM_RELAY_URL: ${{ secrets.TELEGRAM_RELAY_URL }}
-          TELEGRAM_RELAY_SECRET: ${{ secrets.TELEGRAM_RELAY_SECRET }}
-          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
           SITE_ADDRESS: ${{ secrets.SITE_ADDRESS }}
           ACME_EMAIL: ${{ secrets.ACME_EMAIL }}
           ACME_CA: ${{ secrets.ACME_CA || 'https://acme-v02.api.letsencrypt.org/directory' }}
@@ -208,9 +238,8 @@ jobs:
           DEBUG: ${{ secrets.DEBUG || 'false' }}
         run: |
           # список переменных явный: $$(date +%u) в сервисе backup подставлять нельзя
-          envsubst '${API_IMAGE} ${WEB_IMAGE} ${CADDY_IMAGE} ${BOT_TOKEN} ${BOT_USERNAME}
-                    ${TELEGRAM_RELAY_URL} ${TELEGRAM_RELAY_SECRET}
-                    ${POSTGRES_PASSWORD} ${SITE_ADDRESS} ${ACME_EMAIL} ${ACME_CA}
+          envsubst '${API_IMAGE} ${WEB_IMAGE} ${CADDY_IMAGE} ${SECRETS_RELEASE} ${BOT_USERNAME}
+                    ${TELEGRAM_RELAY_URL} ${SITE_ADDRESS} ${ACME_EMAIL} ${ACME_CA}
                     ${INIT_DATA_MAX_AGE_SECONDS} ${DEBUG}' \
             < deploy/docker-compose.prod.yml > "$RUNNER_TEMP/spec.yml"
           docker compose -f "$RUNNER_TEMP/spec.yml" config --quiet
@@ -260,6 +289,18 @@ jobs:
           done
           echo "::warning::сайт не ответил за 5 минут"
 
+      - name: Удалить временные учётные данные runner
+        if: always()
+        run: |
+          python3 - <<'PY'
+          import os
+          import shutil
+          from pathlib import Path
+          root = Path(os.environ["RUNNER_TEMP"])
+          shutil.rmtree(root / "fellow-ssh", ignore_errors=True)
+          (root / "sa-key.json").unlink(missing_ok=True)
+          PY
+
       - name: Вывести результат
         if: always()
         env:
@@ -270,6 +311,7 @@ jobs:
           WEB_BUILD_OUTCOME: ${{ steps.build_web.outcome }}
           CADDY_BUILD_OUTCOME: ${{ steps.build_caddy.outcome }}
           COI_UPDATE_OUTCOME: ${{ steps.update_coi.outcome }}
+          SECRETS_UPLOAD_OUTCOME: ${{ steps.upload_secrets.outcome }}
           HEALTHCHECK_OUTCOME: ${{ steps.healthcheck.outcome }}
         run: |
           backend_changed=Нет
@@ -289,6 +331,7 @@ jobs:
             echo
             echo '| Этап | Результат |'
             echo '| --- | --- |'
+            echo "| Передача секретов | $SECRETS_UPLOAD_OUTCOME |"
             echo "| Обновление COI | $COI_UPDATE_OUTCOME |"
             echo "| Healthcheck | $HEALTHCHECK_OUTCOME |"
           } >> "$GITHUB_STEP_SUMMARY"

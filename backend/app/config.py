@@ -1,3 +1,4 @@
+import os
 import re
 from functools import lru_cache
 from typing import Self
@@ -71,4 +72,4 @@ class Settings(BaseSettings):
 
 @lru_cache
 def get_settings() -> Settings:
-    return Settings()
+    return Settings(_secrets_dir=os.environ.get("APP_SECRETS_DIR"))
