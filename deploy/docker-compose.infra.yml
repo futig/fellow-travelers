@@ -1,0 +1,105 @@
+# Deployed only during bootstrap or an explicit infrastructure update.
+version: "3.8"
+
+x-singleton: &singleton
+  replicas: 1
+  update_config:
+    parallelism: 1
+    order: stop-first
+    monitor: 30s
+    failure_action: rollback
+  restart_policy:
+    condition: any
+    delay: 5s
+
+services:
+  db:
+    image: "${DB_IMAGE:-postgres:16.15-alpine}"
+    environment:
+      POSTGRES_USER: fellow
+      POSTGRES_PASSWORD_FILE: /run/secrets/password
+      POSTGRES_DB: fellow_travelers
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - /var/lib/fellow-travelers/secrets/${INFRA_SECRETS_RELEASE}/db:/run/secrets:ro
+    networks: [private]
+    stop_grace_period: 60s
+    healthcheck:
+      test: [CMD, pg_isready, -U, fellow, -d, fellow_travelers]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    deploy: *singleton
+
+  caddy:
+    image: "${CADDY_IMAGE}"
+    environment:
+      SITE_ADDRESS: "${SITE_ADDRESS}"
+      ACME_EMAIL: "${ACME_EMAIL}"
+      ACME_CA: "${ACME_CA}"
+    ports:
+      - target: 80
+        published: 80
+        protocol: tcp
+        mode: host
+      - target: 443
+        published: 443
+        protocol: tcp
+        mode: host
+      - target: 443
+        published: 443
+        protocol: udp
+        mode: host
+    volumes:
+      - caddy_data:/data
+      - caddy_config:/config
+    networks: [private]
+    stop_grace_period: 30s
+    deploy: *singleton
+
+  backup:
+    image: "${DB_IMAGE:-postgres:16.15-alpine}"
+    entrypoint: [/bin/sh, -c]
+    command:
+      - |
+        set -eu
+        while true; do
+          day=$$(date +%u)
+          # Publish a dump only after pg_dump succeeds; retain the preceding good backup.
+          if pg_dump -h db -U fellow -d fellow_travelers -f /backups/dump.tmp; then
+            gzip -c /backups/dump.tmp > /backups/day$$day.sql.gz.tmp
+            mv /backups/day$$day.sql.gz.tmp /backups/day$$day.sql.gz
+            rm /backups/dump.tmp
+            echo "backup done: day$$day"
+          else
+            echo "backup FAILED" >&2
+            exit 1
+          fi
+          sleep 86400
+        done
+    environment:
+      PGPASSFILE: /run/secrets/pgpass
+    volumes:
+      - backups:/backups
+      - /var/lib/fellow-travelers/secrets/${INFRA_SECRETS_RELEASE}/backup:/run/secrets:ro
+    networks: [private]
+    deploy: *singleton
+
+networks:
+  private:
+    external: true
+    name: fellow-private
+
+volumes:
+  pgdata:
+    external: true
+    name: "${DB_VOLUME}"
+  caddy_data:
+    external: true
+    name: "${CADDY_DATA_VOLUME}"
+  caddy_config:
+    external: true
+    name: "${CADDY_CONFIG_VOLUME}"
+  backups:
+    external: true
+    name: "${BACKUPS_VOLUME}"
