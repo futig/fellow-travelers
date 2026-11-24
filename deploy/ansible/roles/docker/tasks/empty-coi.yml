@@ -1,0 +1,34 @@
+- name: Require preinstalled Docker on a COI host
+  ansible.builtin.assert:
+    that:
+      - docker_binary.stat.exists
+    fail_msg: COI must already contain Docker; refusing to change an unexpected COI installation.
+
+- name: Check COI specifications without logging their contents
+  ansible.builtin.uri:
+    url: "http://169.254.169.254/computeMetadata/v1/instance/attributes/{{ item }}"
+    headers:
+      Metadata-Flavor: Google
+    status_code: [200, 404]
+    return_content: false
+    timeout: 5
+  loop: [docker-compose, docker-container-declaration]
+  register: docker_coi_specs
+  check_mode: false
+  no_log: true
+
+- name: Inspect all containers before stopping the COI agent
+  ansible.builtin.command:
+    argv: [docker, ps, --all, --quiet]
+  register: docker_coi_containers
+  changed_when: false
+  check_mode: false
+
+- name: Require an empty COI host
+  ansible.builtin.import_tasks: assert-empty-coi.yml
+
+- name: Disable the unused COI agent before Swarm setup
+  ansible.builtin.systemd_service:
+    name: "{{ coi_service }}"
+    state: stopped
+    enabled: false

@@ -1,0 +1,6 @@
+- name: Prepare an Ubuntu VM for Fellow Travelers
+  hosts: fellow
+  become: true
+  roles:
+    - role: docker
+    - role: swarm

@@ -1,0 +1,6 @@
+- name: Refuse to take over a configured COI host
+  ansible.builtin.assert:
+    that:
+      - docker_coi_specs.results | map(attribute='status') | list == [404, 404]
+      - docker_coi_containers.stdout | trim | length == 0
+    fail_msg: COI has container metadata or existing containers. Migrate that deployment separately before running Ansible.
