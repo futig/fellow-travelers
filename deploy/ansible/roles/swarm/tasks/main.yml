@@ -1,0 +1,14 @@
+- name: Prepare Docker Swarm resources
+  ansible.builtin.import_tasks: resources.yml
+
+- name: Create private application state directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: '0700'
+  loop:
+    - /var/lib/fellow-travelers
+    - /var/lib/fellow-travelers/swarm
+    - /var/lib/fellow-travelers/secrets

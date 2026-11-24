@@ -1,0 +1,77 @@
+name: Prepare server
+
+on:
+  workflow_dispatch:
+    inputs:
+      check_only:
+        description: Predict changes on an already bootstrapped server without applying them
+        type: boolean
+        default: false
+
+# Share the deployment lock: provisioning and an application release must not overlap.
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.12'
+
+      - name: Проверить параметры подключения
+        env:
+          IP_FOR_ANSIBLE: ${{ secrets.IP_FOR_ANSIBLE }}
+          YC_VM_SSH_KEY: ${{ secrets.YC_VM_SSH_KEY }}
+          YC_VM_SSH_KNOWN_HOSTS: ${{ secrets.YC_VM_SSH_KNOWN_HOSTS }}
+        run: |
+          for name in IP_FOR_ANSIBLE YC_VM_SSH_KEY YC_VM_SSH_KNOWN_HOSTS; do
+            if [ -z "${!name}" ]; then
+              echo "::error::не задан секрет $name"
+              exit 1
+            fi
+          done
+
+      - name: Установить Ansible
+        run: |
+          python3 -m venv "$RUNNER_TEMP/ansible"
+          "$RUNNER_TEMP/ansible/bin/pip" install --require-hashes \
+            -r deploy/ansible/requirements.lock
+
+      - id: ssh
+        name: Подготовить SSH inventory для указанного IP
+        env:
+          IP_FOR_ANSIBLE: ${{ secrets.IP_FOR_ANSIBLE }}
+          YC_VM_SSH_KEY: ${{ secrets.YC_VM_SSH_KEY }}
+          YC_VM_SSH_KNOWN_HOSTS: ${{ secrets.YC_VM_SSH_KNOWN_HOSTS }}
+          SSH_USER: ${{ vars.ANSIBLE_SSH_USER || vars.YC_VM_SSH_USER || 'ubuntu' }}
+        run: |
+          "$RUNNER_TEMP/ansible/bin/python" .github/scripts/prepare-ansible-inventory.py
+
+      - name: Подготовить Docker и Swarm через Ansible
+        working-directory: deploy/ansible
+        env:
+          ANSIBLE_INVENTORY: ${{ steps.ssh.outputs.inventory_path }}
+          CHECK_ONLY: ${{ inputs.check_only }}
+        run: |
+          args=()
+          if [ "$CHECK_ONLY" = "true" ]; then args+=(--check); fi
+          "$RUNNER_TEMP/ansible/bin/ansible-playbook" bootstrap.yml "${args[@]}"
+
+      - name: Удалить временные SSH-ключи и inventory
+        if: always()
+        run: |
+          python3 - <<'PY'
+          import os
+          import shutil
+          from pathlib import Path
+          root = Path(os.environ["RUNNER_TEMP"])
+          shutil.rmtree(root / "fellow-ansible-ssh", ignore_errors=True)
+          PY

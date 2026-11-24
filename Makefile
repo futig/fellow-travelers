@@ -14,6 +14,9 @@ VENV_OK  := $(VENV)/.installed
 PY       := $(CURDIR)/$(VENV)/bin/python
 BIN      := $(CURDIR)/$(VENV)/bin
 COMPOSE  := docker compose
+ANSIBLE_DIR := deploy/ansible
+ANSIBLE_BIN := $(CURDIR)/$(ANSIBLE_DIR)/.venv/bin
+ANSIBLE_ARGS ?=
 
 # Сколько тестовых пользователей создавать (1..5).
 DEV_USERS ?= 3
@@ -22,6 +25,7 @@ LOCK_FLAGS := --universal --generate-hashes --python-version 3.12
 
 .DEFAULT_GOAL := help
 .PHONY: help dev-setup dev db db-stop migrate seed dev-users backend worker frontend check test test-backend lint fmt-check typecheck lock lock-check
+.PHONY: ansible-setup ansible-check ansible-bootstrap
 
 help: ## Список команд
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  make %-10s %s\n", $$1, $$2}'
@@ -108,3 +112,14 @@ typecheck: $(VENV_OK) ## mypy — типы бэкенда
 # db до test-backend: тестам бэкенда нужна БД; порядок пререквизитов make соблюдает.
 check: lint fmt-check typecheck db test-backend $(FRONTEND)/node_modules ## Все проверки: ruff, mypy, pytest; lint, format, typecheck, test, build, check:api (фронт)
 	cd $(FRONTEND) && npm run lint && npm run format:check && npm run typecheck && npm test && npm run build && npm run check:api
+
+ansible-setup: ## Установить Ansible (Python 3.12–3.14)
+	python3 -m venv $(ANSIBLE_DIR)/.venv
+	$(ANSIBLE_BIN)/python -m pip install --require-hashes -r $(ANSIBLE_DIR)/requirements.lock
+
+ansible-check: ## Синтаксис playbook и локальные проверки подготовки inventory
+	cd $(ANSIBLE_DIR) && $(ANSIBLE_BIN)/ansible-playbook -i inventory.example.yml site.yml --syntax-check
+	cd $(ANSIBLE_DIR) && $(ANSIBLE_BIN)/python -m unittest discover -s tests -v
+
+ansible-bootstrap: ## Подготовить новую Ubuntu ВМ (inventory.local.yml)
+	cd $(ANSIBLE_DIR) && $(ANSIBLE_BIN)/ansible-playbook bootstrap.yml $(ANSIBLE_ARGS)

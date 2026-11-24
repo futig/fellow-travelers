@@ -1,0 +1,35 @@
+- name: Check supported operating system
+  ansible.builtin.assert:
+    that:
+      - ansible_facts['distribution'] == 'Ubuntu'
+      - ansible_facts['distribution_version'] in ['22.04', '24.04', '26.04']
+      - ansible_facts['architecture'] in ['x86_64', 'aarch64']
+      - ansible_facts['service_mgr'] == 'systemd'
+    fail_msg: Use Ubuntu LTS 22.04, 24.04 or 26.04, amd64 or arm64, with Python 3 and sudo.
+
+- name: Inspect host services
+  ansible.builtin.service_facts:
+
+- name: Check whether Docker is already installed
+  ansible.builtin.stat:
+    path: /usr/bin/docker
+  register: docker_binary
+
+- name: Prepare an empty COI host for Swarm
+  ansible.builtin.include_tasks: empty-coi.yml
+  loop: "{{ ['yc-container-daemon.service', 'yc-container-daemon'] | intersect(ansible_facts['services'].keys() | list) }}"
+  loop_control:
+    loop_var: coi_service
+  when: >-
+    ansible_facts['services'][coi_service].get('state') == 'running'
+    or ansible_facts['services'][coi_service].get('status') == 'enabled'
+
+- name: Install Docker only when it is absent
+  ansible.builtin.import_tasks: install.yml
+  when: not docker_binary.stat.exists
+
+- name: Enable Docker on boot
+  ansible.builtin.systemd_service:
+    name: docker
+    enabled: true
+    state: started

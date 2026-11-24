@@ -1,0 +1,85 @@
+- name: Inspect Docker Swarm state
+  ansible.builtin.command:
+    argv: [docker, info, --format, "{{ '{{json .Swarm}}' }}"]
+  register: fellow_swarm_info
+  changed_when: false
+  check_mode: false
+
+- name: Require an inactive Swarm or a manager
+  ansible.builtin.assert:
+    that:
+      - >-
+        (fellow_swarm_info.stdout | from_json).LocalNodeState == 'inactive'
+        or (fellow_swarm_info.stdout | from_json).ControlAvailable
+    fail_msg: This VM must be a standalone host or a Swarm manager.
+
+- name: Initialize Swarm using the private interface
+  ansible.builtin.command:
+    argv: [docker, swarm, init, --advertise-addr, "{{ fellow_swarm_advertise_addr }}"]
+  when:
+    - (fellow_swarm_info.stdout | from_json).LocalNodeState == 'inactive'
+    - not ansible_check_mode
+  changed_when: true
+
+- name: Prepare the single-node Swarm resources
+  when: not ansible_check_mode or (fellow_swarm_info.stdout | from_json).LocalNodeState != 'inactive'
+  block:
+    - name: List Swarm nodes
+      ansible.builtin.command:
+        argv: [docker, node, ls, -q]
+      register: fellow_swarm_nodes
+      changed_when: false
+      check_mode: false
+
+    - name: Require a single-node Swarm for local persistent volumes
+      ansible.builtin.assert:
+        that:
+          - fellow_swarm_nodes.stdout_lines | length == 1
+        fail_msg: Fellow Travelers uses local volumes and requires exactly one Swarm node.
+
+    - name: List Docker networks
+      ansible.builtin.command:
+        argv: [docker, network, ls, --format, "{{ '{{.Name}}' }}"]
+      register: fellow_networks
+      changed_when: false
+      check_mode: false
+
+    - name: Create the application overlay network
+      ansible.builtin.command:
+        argv: [docker, network, create, --driver, overlay, --attachable, fellow-private]
+      when:
+        - "'fellow-private' not in fellow_networks.stdout_lines"
+        - not ansible_check_mode
+      changed_when: true
+
+    - name: Inspect the application network
+      ansible.builtin.command:
+        argv: [docker, network, inspect, fellow-private]
+      register: fellow_network_info
+      changed_when: false
+      check_mode: false
+      when: not ansible_check_mode or 'fellow-private' in fellow_networks.stdout_lines
+
+    - name: Validate the existing application network
+      ansible.builtin.assert:
+        that:
+          - (fellow_network_info.stdout | from_json)[0].Driver == 'overlay'
+          - (fellow_network_info.stdout | from_json)[0].Attachable
+        fail_msg: fellow-private must be an attachable overlay network.
+      when: not ansible_check_mode or 'fellow-private' in fellow_networks.stdout_lines
+
+    - name: List Docker volumes
+      ansible.builtin.command:
+        argv: [docker, volume, ls, --format, "{{ '{{.Name}}' }}"]
+      register: fellow_volumes
+      changed_when: false
+      check_mode: false
+
+    - name: Create the shared static assets volume
+      ansible.builtin.command:
+        argv: [docker, volume, create, fellow-assets]
+      when:
+        - "'fellow-assets' not in fellow_volumes.stdout_lines"
+        - not ansible_check_mode
+      changed_when: true
+
